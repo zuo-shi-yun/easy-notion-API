@@ -1,1 +1,5 @@
 ﻿.idea
+setup.py
+build/
+dist/
+easyNotion.egg-info/
