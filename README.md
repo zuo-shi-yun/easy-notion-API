@@ -23,8 +23,6 @@ English|[简体中文](README-zh.md)
 
 First, you need to obtain the Token and database\_id for integrating with Notion. To learn how to obtain the Token, please refer to [this link](https://developers.notion.com/docs/getting-started#step-2-share-a-database-with-your-integration). To get the database\_id, check the URL of the database page in the Notion documentation.
 
-python
-
 ```python
 from easyNotion import easyNotion
 
@@ -63,8 +61,6 @@ Class: easyNotion
 -----------------
 
 ### Constructor
-
-python
 
 ```python
 def __init__(self, database_id, token)
@@ -106,8 +102,6 @@ def __init__(self, database_id, token)
 
 #### `getTableAll()`
 
-python
-
 ```python
 def getTableAll(self) -> dict
 ```
@@ -117,8 +111,6 @@ def getTableAll(self) -> dict
     *   JSON object containing all raw data from the database.
 
 #### `getTable()`
-
-python
 
 ```python
 def getTable(self) -> list
@@ -132,8 +124,6 @@ def getTable(self) -> list
 
 #### `queryCol(col: str) -> list`
 
-python
-
 ```python
 def queryCol(self, col: str) -> list
 ```
@@ -145,8 +135,6 @@ def queryCol(self, col: str) -> list
     *   List of strings containing the values in the specified column.
 
 #### `queryRow(col: str, content: str) -> dict`
-
-python
 
 ```python
 def queryRow(self, col: str, content: str) -> dict
@@ -163,8 +151,6 @@ def queryRow(self, col: str, content: str) -> dict
 
 #### `getRowCnt() -> int`
 
-python
-
 ```python
 def getRowCnt(self) -> int
 ```
@@ -174,8 +160,6 @@ def getRowCnt(self) -> int
     *   Integer representing the total number of rows in the table.
 
 #### `insert(data: dict)`
-
-python
 
 ```python
 def insert(self, data: dict)
@@ -188,8 +172,6 @@ def insert(self, data: dict)
     *   Response object of the API request.
 
 #### `update(col: str, content: str, update_col: str, update_content: str, isTitle=False)`
-
-python
 
 ```python
 def update(self, col: str, content: str, update_col: str, update_content: str, isTitle=False)
@@ -207,8 +189,6 @@ def update(self, col: str, content: str, update_col: str, update_content: str, i
 
 #### `delete(col: str, content: str)`
 
-python
-
 ```python
 def delete(self, col: str, content: str)
 ```
@@ -221,8 +201,6 @@ def delete(self, col: str, content: str)
     *   Response object of the API request.
 
 #### `closeSession()`
-
-python
 
 ```python
 def closeSession(self)
