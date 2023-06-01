@@ -1,5 +1,8 @@
 ﻿.idea
 setup.py
+build/
+dist/
+easyNotion.egg-info/
 build
 dist
 easyNotion.egg-info
