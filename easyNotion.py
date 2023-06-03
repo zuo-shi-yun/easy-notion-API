@@ -24,7 +24,7 @@ class easyNotion:
         self.table = self.getTable()
 
     # 获得原始数据表
-    def getTableAll(self):
+    def getTableAll(self, sort_key=''):
         """
         :return: 获得数据库中的全部的未处理数据,若成功返回json对象,结果按照no列递增排序,失败则返回错误代码\n
         """
@@ -38,16 +38,24 @@ class easyNotion:
         table = json.loads(res.text)
         temp = table['results']
         # 排序
-        table['results'] = sorted(temp, key=lambda x: int(x['properties']['ID']['unique_id']['number']))
+        if 'ID' in temp[0]['properties']:
+            table['results'] = sorted(temp, key=lambda x: int(x['properties']['ID']['unique_id']['number']))
+        elif len(sort_key):
+            if 'title' in temp[0]['properties'][sort_key]:
+                table['results'] = sorted(temp,
+                                          key=lambda x: int(x['properties'][sort_key]['title'][0]['plain_text']))
+            else:
+                table['results'] = sorted(temp,
+                                          key=lambda x: int(x['properties'][sort_key]['rich_text'][0]['plain_text']))
 
         return table
 
     # 获得处理后的数据表
-    def getTable(self):
+    def getTable(self, sort_key=''):
         """
         获得处理后的数据表
         """
-        base_table = self.getTableAll()  # 未处理的表
+        base_table = self.getTableAll(sort_key)  # 未处理的表
         table = []
 
         for row in base_table['results']:
