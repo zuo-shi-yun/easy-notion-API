@@ -4,8 +4,9 @@ import requests
 
 
 class easyNotion:
-    def __init__(self, database_id, token):
+    def __init__(self, database_id, token, sort_key=''):
         # 基础url
+        self.sort_key = sort_key
         self.baseUrl = 'https://api.notion.com/v1/'
         # 数据库ID
         self.database_id = database_id
@@ -24,7 +25,7 @@ class easyNotion:
         self.table = self.getTable()
 
     # 获得原始数据表
-    def getTableAll(self, sort_key=''):
+    def getTableAll(self):
         """
         :return: 获得数据库中的全部的未处理数据,若成功返回json对象,结果按照no列递增排序,失败则返回错误代码\n
         """
@@ -40,22 +41,23 @@ class easyNotion:
         # 排序
         if 'ID' in temp[0]['properties']:
             table['results'] = sorted(temp, key=lambda x: int(x['properties']['ID']['unique_id']['number']))
-        elif len(sort_key):
-            if 'title' in temp[0]['properties'][sort_key]:
+        elif len(self.sort_key):
+            if 'title' in temp[0]['properties'][self.sort_key]:
                 table['results'] = sorted(temp,
-                                          key=lambda x: int(x['properties'][sort_key]['title'][0]['plain_text']))
+                                          key=lambda x: int(x['properties'][self.sort_key]['title'][0]['plain_text']))
             else:
                 table['results'] = sorted(temp,
-                                          key=lambda x: int(x['properties'][sort_key]['rich_text'][0]['plain_text']))
+                                          key=lambda x: int(
+                                              x['properties'][self.sort_key]['rich_text'][0]['plain_text']))
 
         return table
 
     # 获得处理后的数据表
-    def getTable(self, sort_key=''):
+    def getTable(self):
         """
         获得处理后的数据表
         """
-        base_table = self.getTableAll(sort_key)  # 未处理的表
+        base_table = self.getTableAll()  # 未处理的表
         table = []
 
         for row in base_table['results']:
@@ -111,6 +113,21 @@ class easyNotion:
                 return row
         else:
             return {}
+
+    # 查询一个数据
+    def queryCell(self, key_col: str, content: str, find_col: str):
+        """
+        根据key_col列的content数据查找find_col列的数据
+        :param key_col:标识行的列名
+        :param content:表示行的列的内容
+        :param find_col:查找列的列明
+        :return:返回该单元格的内容
+        """
+        for i in self.table:
+            if i[key_col] == content:
+                return i[find_col]
+        else:
+            return ''
 
     # 获取总行数
     def getRowCnt(self):
