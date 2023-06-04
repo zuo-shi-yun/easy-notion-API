@@ -39,16 +39,18 @@ class easyNotion:
         table = json.loads(res.text)
         temp = table['results']
         # 排序
-        if 'ID' in temp[0]['properties']:
-            table['results'] = sorted(temp, key=lambda x: int(x['properties']['ID']['unique_id']['number']))
-        elif len(self.sort_key):
-            if 'title' in temp[0]['properties'][self.sort_key]:
-                table['results'] = sorted(temp,
-                                          key=lambda x: int(x['properties'][self.sort_key]['title'][0]['plain_text']))
-            else:
-                table['results'] = sorted(temp,
-                                          key=lambda x: int(
-                                              x['properties'][self.sort_key]['rich_text'][0]['plain_text']))
+        if len(temp):
+            if 'ID' in temp[0]['properties']:
+                table['results'] = sorted(temp, key=lambda x: int(x['properties']['ID']['unique_id']['number']))
+            elif len(self.sort_key):
+                if 'title' in temp[0]['properties'][self.sort_key]:
+                    table['results'] = sorted(temp,
+                                              key=lambda x: int(
+                                                  x['properties'][self.sort_key]['title'][0]['plain_text']))
+                else:
+                    table['results'] = sorted(temp,
+                                              key=lambda x: int(
+                                                  x['properties'][self.sort_key]['rich_text'][0]['plain_text']))
 
         return table
 
@@ -59,28 +61,28 @@ class easyNotion:
         """
         base_table = self.getTableAll()  # 未处理的表
         table = []
+        if len(base_table['results']):
+            for row in base_table['results']:
+                info = {'id': row['id']}  # 行id,这是系统的id不是显示的ID
 
-        for row in base_table['results']:
-            info = {'id': row['id']}  # 行id,这是系统的id不是显示的ID
-
-            for col in row['properties']:
-                if row['properties'][col]['type'] == 'unique_id':  # 特殊处理ID列
-                    info['ID'] = row['properties'][col]['unique_id']['prefix'] + '-' + str(
-                        row['properties'][col]['unique_id']['number'])
-                elif row['properties'][col]['type'] == 'title':  # 特殊处理title列
-                    title = row['properties'][col]['title']
-                    if len(title) != 0:
-                        info[col] = row['properties'][col]['title'][0]['plain_text']
+                for col in row['properties']:
+                    if row['properties'][col]['type'] == 'unique_id':  # 特殊处理ID列
+                        info['ID'] = row['properties'][col]['unique_id']['prefix'] + '-' + str(
+                            row['properties'][col]['unique_id']['number'])
+                    elif row['properties'][col]['type'] == 'title':  # 特殊处理title列
+                        title = row['properties'][col]['title']
+                        if len(title) != 0:
+                            info[col] = row['properties'][col]['title'][0]['plain_text']
+                        else:
+                            info[col] = ''
                     else:
-                        info[col] = ''
-                else:
-                    text = info[col] = row['properties'][col]['rich_text']
-                    if len(text) != 0:
-                        info[col] = row['properties'][col]['rich_text'][0]['plain_text']
-                    else:
-                        info[col] = ''
+                        text = info[col] = row['properties'][col]['rich_text']
+                        if len(text) != 0:
+                            info[col] = row['properties'][col]['rich_text'][0]['plain_text']
+                        else:
+                            info[col] = ''
 
-            table.append(info)
+                table.append(info)
 
         return table
 
