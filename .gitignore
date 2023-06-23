@@ -12,3 +12,4 @@ upload/
 .gitignore
 test.py
 .iml
+fun.py
