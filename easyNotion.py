@@ -42,12 +42,13 @@ class easyNotion:
     def __get_original_response(self) -> requests.Response:
         payload = {'sorts': []}
 
+        # 排序请求
         for sort_col in zip(self.__sort_key, self.__reverse):
             payload['sorts'].append(
                 {'property': sort_col[0],
                  'direction': 'descending' if sort_col[1] else 'ascending'})
 
-            # 发送请求
+        # 发送请求
         res = self.__session.request("POST", self.baseUrl + 'databases/' + self.database_id + '/query', json=payload,
                                      headers=self.headers)
 
@@ -63,7 +64,7 @@ class easyNotion:
         :return: 获得数据库中的全部的未处理数据,若成功返回json对象,结果按照no列递增排序,失败则返回错误代码\n
         """
         res = self.__get_original_response()
-
+        # 转为json对象
         return json.loads(res.text)
 
     # 根据原始表获得处理后的表
@@ -74,6 +75,7 @@ class easyNotion:
         :return: 成功返回True
         """
         table = []
+        # 从原始表中获得数据
         for original_row in base_table['results']:
             row = {'id': original_row['id']}  # 行id,这是系统的id不是显示的ID
 
@@ -81,21 +83,21 @@ class easyNotion:
                 if original_row['properties'][col]['type'] == 'unique_id':  # 处理ID列
                     row[col] = original_row['properties'][col]['unique_id']['prefix'] + '-' + str(
                         original_row['properties'][col]['unique_id']['number'])
-                    self.__col_name[col] = 'ID'
+                    self.__col_name[col] = 'ID'  # 列名称:列类型
                 elif original_row['properties'][col]['type'] == 'title':  # 处理title列
                     title = original_row['properties'][col]['title']
                     if len(title) != 0:
                         row[col] = original_row['properties'][col]['title'][0]['plain_text']
                     else:
                         row[col] = ''
-                    self.__col_name[col] = 'title'
+                    self.__col_name[col] = 'title'  # 列名称:列类型
                 elif original_row['properties'][col]['type'] == 'url':  # 处理url列
                     url = original_row['properties'][col]['url']
                     if url:
                         row[col] = url
                     else:
                         row[col] = ''
-                    self.__col_name[col] = 'url'
+                    self.__col_name[col] = 'url'  # 列名称:列类型
                 else:  # 处理text列
                     text = row[col] = original_row['properties'][col]['rich_text']
                     if len(text) != 0:
@@ -103,7 +105,7 @@ class easyNotion:
                     else:
                         row[col] = ''
 
-                    self.__col_name[col] = 'text'
+                    self.__col_name[col] = 'text'  # 列名称:列类型
             table.append(row)
 
         self.__table = table
@@ -115,9 +117,11 @@ class easyNotion:
         获得处理后的数据表\n
         :return: 处理后的数据表
         """
+        # 已经有表则直接返回
         if self.__table:
             return copy.deepcopy(self.__table)
 
+        # 没有表则查询
         base_table = self.get_original_table()  # 未处理的表
         self.__get_table(base_table)
 
@@ -129,9 +133,10 @@ class easyNotion:
         获得列名称:列类型列表\n
         :return: 列名称字典,{'text':['文本类型的列名'],'ID':'ID类型的列明','title':'title类型的列名'}
         """
+        # 已经有列名:列类型则直接返回
         if self.__col_name:
             return copy.deepcopy(self.__col_name)
-
+        # 没有则查询
         self.get_table()
         return copy.deepcopy(self.__col_name)
 
@@ -153,18 +158,18 @@ class easyNotion:
         """
 
         for i in condition:
-            if not re.match(row[i], condition[i]):
+            if not re.match(row[i], condition[i]):  # 不符合正则则返回False
                 return False
         else:
             return True
 
     # 通用查询
-    def query(self, query_col: List[str], query_condition: Dict[str, str] = '') -> [List[Dict[str, str]], List]:
+    def query(self, query_col: List[str], query_condition: Dict[str, str] = '') -> list:
         """
         根据query_condition条件对数据表的query_col列进行查询\n
         :param query_col:要查询的列名,为空列表时查询所有的列\n
         :param query_condition:查询条件,{'列名':'列值'},默认查询全部行\n
-        :return:满足条件的行,当只查询一列时返回一个列表
+        :return:满足条件的行(当只查询一列时返回一个列表,多列时返回字典列表),查询行数,列表中元素的类型(没有结果时为None)
         """
         table = self.get_table()
         ret = []
@@ -184,20 +189,6 @@ class easyNotion:
                 ret.append(temp_row)
 
         return copy.deepcopy(ret)
-
-    # 查询一个数据
-    def query_cell(self, query_condition: Dict[str, str], find_col: str) -> str:
-        """
-        根据key_col列的content数据查找find_col列的数据\n
-        :param query_condition: 查询条件,{'列名':'列值'}\n
-        :param find_col:查找列的列明\n
-        :return:返回该单元格的内容
-        """
-        for row in self.get_table():
-            if self.__is_match_condition(row, query_condition):
-                return copy.deepcopy(row[find_col])
-        else:
-            return ''
 
     # 得到各种类型数据的用于更新、插入数据的payload
     def __get_payload(self, col_name: str, content: str) -> Dict[str, dict]:
@@ -254,10 +245,11 @@ class easyNotion:
         col_names = self.get_col_name()
         payload = {}
 
+        # 遍历全部列
         for col_name in col_names:
-            if col_name in data:
+            if col_name in data:  # 若已指定数据则插入指定数据
                 payload.update(self.__get_payload(col_name, data[col_name]))
-            else:
+            else:  # 没有指定则为空
                 payload.update(self.__get_payload(col_name, ''))
 
         payload = {
@@ -283,18 +275,19 @@ class easyNotion:
         :return:成功返回成功,失败返回错误代码
         """
         payload = {"properties": {}}
+        # 获得更新payload
         for col_name in update_data:
             payload['properties'].update(self.__get_payload(col_name, update_data[col_name]))
 
-        id = self.query_cell(update_condition, 'id')
+        id = self.query(['id'], update_condition)[0]
 
         ret = self.__session.request('PATCH', self.baseUrl + 'pages/' + id, headers=self.headers, json=payload)
 
         # 更新表
         if ret.ok:
             table = self.get_table()
-            for row in table:
-                if self.__is_match_condition(row, update_condition):
+            for row in table:  # 遍历表,找到更新的行
+                if row['id'] == id:
                     for col_name in update_data:
                         row[col_name] = update_data[col_name]
                 break
@@ -313,7 +306,7 @@ class easyNotion:
         id = ''
 
         for row in self.get_table():
-            for condition in delete_condition:
+            for condition in delete_condition:  # 找到指定行
                 if row[condition] == delete_condition[condition]:
                     id = row['id']
                     break
@@ -324,7 +317,7 @@ class easyNotion:
         if ret.ok:
             table = self.get_table()
             for row in table:
-                if self.__is_match_condition(row, delete_condition):
+                if row['id'] == id:
                     table.remove(row)
                     break
 
