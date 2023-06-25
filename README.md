@@ -7,26 +7,29 @@ English|[简体中文](README-zh.md)
 :muscle: Function Introduction
 ------------------------------
 
-*   A simpler and faster Notion API wrapper compared to other existing ones.
-*   Closes proxies when sending requests.
-*   Provides basic CRUD (Create, Read, Update, Delete) operations.
+* A simpler and faster Notion API wrapper compared to other existing ones.
+* Closes proxies when sending requests.
+* Provides basic CRUD (Create, Read, Update, Delete) operations.
 
 :bangbang: Usage Limitations
 ----------------------------
 
-*   Only applicable to Notion pages of type "Database - Full page".
-*   All column properties in the database, except the title column, must be of type "text".
-*   There is no asynchronous version available.
+* Only applicable to Notion pages of type "Database - Full page".
+* All column properties in the database, except the title column, must be of type "text".
+* There is no asynchronous version available.
 
 :wrench: Quick Start
 --------------------
 
-First, you need to obtain the Token and database\_id for integrating with Notion. To learn how to obtain the Token, please refer to [this link](https://developers.notion.com/docs/getting-started#step-2-share-a-database-with-your-integration). To get the database\_id, check the URL of the database page in the Notion documentation.
+First, you need to obtain the Token and database\_id for integrating with Notion. To learn how to obtain the Token,
+please refer
+to [this link](https://developers.notion.com/docs/getting-started#step-2-share-a-database-with-your-integration). To get
+the database\_id, check the URL of the database page in the Notion documentation.
 
 ```python
 from easyNotion import easyNotion
 
-db = easyNotion(database_id='database_id', token='token')
+db = easyNotion(notion_id='notion_id', token='token')
 
 # Get the entire table (unprocessed)
 table_all = db.getTableAll()
@@ -48,7 +51,8 @@ data = {"title": "test_title", "column_name1": "value1", "column_name2": "value2
 res = db.insert(data=data)
 
 # Update data
-res = db.update(col="column_name", content="column_content", update_col="update_column_name", update_content="new_value", isTitle=False)
+res = db.update(col="column_name", content="column_content", update_col="update_column_name",
+                update_content="new_value", isTitle=False)
 
 # Delete data
 res = db.delete(col="column_name", content="column_content")
@@ -66,37 +70,37 @@ Class: easyNotion
 def __init__(self, database_id, token)
 ```
 
-*   Initializes a new instance of the `easyNotion` class.
-*   Parameters:
-    *   `database_id` (str): The ID of the Notion database.
-    *   `token` (str): The API token used to access the Notion API.
+* Initializes a new instance of the `easyNotion` class.
+* Parameters:
+    * `database_id` (str): The ID of the Notion database.
+    * `token` (str): The API token used to access the Notion API.
 
 ### Class Attributes
 
 #### `baseUrl`
 
-*   Type: String
-*   Description: The base URL of the API.
+* Type: String
+* Description: The base URL of the API.
 
 #### `database_id`
 
-*   Type: String
-*   Description: The ID of the database.
+* Type: String
+* Description: The ID of the database.
 
 #### `headers`
 
-*   Type: Dictionary
-*   Description: Request headers, including Accept, Notion-Version, Content-Type, Authorization, etc.
+* Type: Dictionary
+* Description: Request headers, including Accept, Notion-Version, Content-Type, Authorization, etc.
 
 #### `session`
 
-*   Type: `requests.Session` object
-*   Description: Session object used to send HTTP requests.
+* Type: `requests.Session` object
+* Description: Session object used to send HTTP requests.
 
 #### `table`
 
-*   Type: List
-*   Description: Processed data table containing all rows from the database.
+* Type: List
+* Description: Processed data table containing all rows from the database.
 
 ### Methods
 
@@ -106,9 +110,9 @@ def __init__(self, database_id, token)
 def getTableAll(self) -> dict
 ```
 
-*   Retrieves the raw data table from the Notion database.
-*   Returns:
-    *   JSON object containing all raw data from the database.
+* Retrieves the raw data table from the Notion database.
+* Returns:
+    * JSON object containing all raw data from the database.
 
 #### `getTable()`
 
@@ -116,11 +120,12 @@ def getTableAll(self) -> dict
 def getTable(self) -> list
 ```
 
-*   Retrieves the processed data table from the Notion database.
-*   Returns:
-    *   List of dictionaries representing the processed data table.
-*   Note:
-    *   This method internally calls `getTableAll()` to retrieve the raw data and process it to obtain the final data table.
+* Retrieves the processed data table from the Notion database.
+* Returns:
+    * List of dictionaries representing the processed data table.
+* Note:
+    * This method internally calls `getTableAll()` to retrieve the raw data and process it to obtain the final data
+      table.
 
 #### `queryCol(col: str) -> list`
 
@@ -128,11 +133,11 @@ def getTable(self) -> list
 def queryCol(self, col: str) -> list
 ```
 
-*   Queries a specific column in the data table and returns its values.
-*   Parameters:
-    *   `col` (str): Name of the column to query.
-*   Returns:
-    *   List of strings containing the values in the specified column.
+* Queries a specific column in the data table and returns its values.
+* Parameters:
+    * `col` (str): Name of the column to query.
+* Returns:
+    * List of strings containing the values in the specified column.
 
 #### `queryRow(col: str, content: str) -> dict`
 
@@ -140,14 +145,14 @@ def queryCol(self, col: str) -> list
 def queryRow(self, col: str, content: str) -> dict
 ```
 
-*   Queries a row in the data table based on a specific column and its content.
-*   Parameters:
-    *   `col` (str): Name of the column to search.
-    *   `content` (str): Value to search in the specified column.
-*   Returns:
-    *   Dictionary representing the raw data of the matching row.
-*   Note:
-    *   If no matching row is found, an empty dictionary `{}` is returned.
+* Queries a row in the data table based on a specific column and its content.
+* Parameters:
+    * `col` (str): Name of the column to search.
+    * `content` (str): Value to search in the specified column.
+* Returns:
+    * Dictionary representing the raw data of the matching row.
+* Note:
+    * If no matching row is found, an empty dictionary `{}` is returned.
 
 #### `getRowCnt() -> int`
 
@@ -155,9 +160,9 @@ def queryRow(self, col: str, content: str) -> dict
 def getRowCnt(self) -> int
 ```
 
-*   Retrieves the total number of rows in the data table.
-*   Returns:
-    *   Integer representing the total number of rows in the table.
+* Retrieves the total number of rows in the data table.
+* Returns:
+    * Integer representing the total number of rows in the table.
 
 #### `insert(data: dict)`
 
@@ -165,11 +170,12 @@ def getRowCnt(self) -> int
 def insert(self, data: dict)
 ```
 
-*   Inserts data into the Notion database.
-*   Parameters:
-    *   `data` (dict): Data to insert. The first value in the dictionary must correspond to the value of the "title" column.
-*   Returns:
-    *   Response object of the API request.
+* Inserts data into the Notion database.
+* Parameters:
+    * `data` (dict): Data to insert. The first value in the dictionary must correspond to the value of the "title"
+      column.
+* Returns:
+    * Response object of the API request.
 
 #### `update(col: str, content: str, update_col: str, update_content: str, isTitle=False)`
 
@@ -177,15 +183,16 @@ def insert(self, data: dict)
 def update(self, col: str, content: str, update_col: str, update_content: str, isTitle=False)
 ```
 
-*   Updates a specific column of a row in the data table.
-*   Parameters:
-    *   `col` (str): Column used to identify the row.
-    *   `content` (str): Content of the specified column used to identify the row.
-    *   `update_col` (str): Name of the column to update.
-    *   `update_content` (str): New content to update in the specified column.
-    *   `isTitle` (bool): Indicates whether the specified column is the title column. Default is `False`. Set to `True` if the column being updated is the title column.
-*   Returns:
-    *   Response object of the API request.
+* Updates a specific column of a row in the data table.
+* Parameters:
+    * `col` (str): Column used to identify the row.
+    * `content` (str): Content of the specified column used to identify the row.
+    * `update_col` (str): Name of the column to update.
+    * `update_content` (str): New content to update in the specified column.
+    * `isTitle` (bool): Indicates whether the specified column is the title column. Default is `False`. Set to `True` if
+      the column being updated is the title column.
+* Returns:
+    * Response object of the API request.
 
 #### `delete(col: str, content: str)`
 
@@ -193,12 +200,12 @@ def update(self, col: str, content: str, update_col: str, update_content: str, i
 def delete(self, col: str, content: str)
 ```
 
-*   Deletes a row from the data table based on a specific column and its content.
-*   Parameters:
-    *   `col` (str): Name of the column to delete.
-    *   `content` (str): Value that identifies the row to delete in the specified column.
-*   Returns:
-    *   Response object of the API request.
+* Deletes a row from the data table based on a specific column and its content.
+* Parameters:
+    * `col` (str): Name of the column to delete.
+    * `content` (str): Value that identifies the row to delete in the specified column.
+* Returns:
+    * Response object of the API request.
 
 #### `closeSession()`
 
@@ -206,4 +213,4 @@ def delete(self, col: str, content: str)
 def closeSession(self)
 ```
 
-*   Closes the session used for API requests.
+* Closes the session used for API requests.

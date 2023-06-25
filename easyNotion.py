@@ -1,5 +1,6 @@
 import copy
 import json
+import os.path
 import re
 from typing import Dict, List
 
@@ -7,28 +8,35 @@ import requests
 
 
 class easyNotion:
-    def __init__(self, database_id: str, token: str, sort_key: List[str] = '', reverse: List[bool] = '',
-                 trust_env: bool = False):
+    def __init__(self, notion_id: str, token: str, sort_key: List[str] = '', reverse: List[bool] = '',
+                 need_recursion: bool = False, download_path: str = '', is_page: bool = False, trust_env: bool = False):
         """
         获得notion服务\n
-        :param database_id: 数据库ID\n
+        :param notion_id: 数据库ID\n
         :param token: 集成令牌\n
         :param sort_key: 排序的列,支持根据多列排序\n
         :param reverse: 默认升序,为True时降序\n
+        :param need_recursion: 是否需要递归获得页面的数据\n
+        :param download_path: 若有文件保存到哪个目录中\n
+        :param is_page: 是否为页面，默认为否\n
         :param trust_env: 是否关闭代理,默认关闭\n
         """
         # 基础url
-        self.baseUrl = 'https://api.notion.com/v1/'
         # 数据库ID
-        self.database_id = database_id
+        self.notion_id = notion_id
         # 请求头
-        self.headers = {
+        self.is_page = is_page
+        self.download_path = download_path
+        self.need_re_recursion = need_recursion
+        self.__token = token
+        self.__headers = {
             'Accept': 'application/json',
             'Notion-Version': '2022-06-28',
             'Content-Type': 'application/json',
             'Authorization': 'Bearer %s' % token,
             'Cookie': '__cf_bm=uxsliE4EFVpT5YkTZ6ACr1jH2vu1TjkfG1gTPXYDyKg-1683367680-0-AVbHMiNx95PBmx3aRCHSTZhivPqUb/Chgy2MTqqPTAkVweNB6jjhKyixXIak85+bXiotNY0RQCRRi3XWtGQ4L4s='
         }
+        self.__baseUrl = 'https://api.notion.com/v1/'
         self.__sort_key = sort_key
         self.__reverse = reverse if reverse else [False] * len(sort_key)
         self.__session = requests.Session()
@@ -49,8 +57,12 @@ class easyNotion:
                  'direction': 'descending' if sort_col[1] else 'ascending'})
 
         # 发送请求
-        res = self.__session.request("POST", self.baseUrl + 'databases/' + self.database_id + '/query', json=payload,
-                                     headers=self.headers)
+        if self.is_page:  # 页面类型
+            res = self.__session.request("GET", self.__baseUrl + 'blocks/' + self.notion_id + '/children?page_size=100',
+                                         headers=self.__headers)
+        else:  # 数据库类型
+            res = self.__session.request("POST", self.__baseUrl + 'databases/' + self.notion_id + '/query',
+                                         json=payload, headers=self.__headers)
 
         if res.status_code != 200:
             raise Exception('An error occurred:网络链接失败' + str(res.text))
@@ -74,10 +86,67 @@ class easyNotion:
         :param base_table: 原始数据表\n
         :return: 成功返回True
         """
-        table = []
         # 从原始表中获得数据
+        if self.is_page:
+            self.__table = self.__get_page_data(base_table)
+        else:
+            self.__table = self.__get_database_data(base_table)
+
+        return True
+
+    # 获得页面中的数据列表
+    def __get_page_data(self, base_table: json) -> List[Dict[str, str]]:
+        table = []
+        for original_row in base_table['results']:
+            row = {'id': original_row['id']}
+
+            if self.need_re_recursion:
+                page_svc = easyNotion(row['id'], self.__token, is_page=True, download_path=self.download_path)
+                row['page_content'] = page_svc.get_table()
+                self.__col_name[row['id']] = page_svc.get_col_name()
+
+            if original_row['type'] == 'image':  # 图片类型
+                url = original_row['image']['file']['url']
+                session = requests.session()
+                session.trust_env = self.__session.trust_env
+                response = session.get(url)  # 下载文件
+                image_name = re.search(r'.*/(.*\..*)\?.*', url).group(1)  # 得到文件名
+                # Check if the request was successful
+                if response.ok:
+                    path = os.path.join(self.download_path, image_name)  # 得到下载路径
+                    with open(path, "wb") as image_file:
+                        image_file.write(response.content)  # 保存到本地
+                    row['image_download_path'] = path
+                else:
+                    row['image_download_path'] = 'wrong_request'
+
+                self.__col_name[image_name] = 'image'
+            elif original_row['type'] == 'paragraph':  # 文本类型
+                text = original_row['paragraph']['rich_text']
+                if len(text) != 0:
+                    row['paragraph'] = original_row['paragraph']['rich_text'][0]['plain_text']
+                else:
+                    row['paragraph'] = ''
+                self.__col_name[row['id']] = 'paragraph'
+            table.append(row)
+
+        return table
+
+    # 获得数据库中的数据列表
+    def __get_database_data(self, base_table: json) -> List[Dict[str, str]]:
+        """
+        获得数据库中的所有记录\n
+        :param base_table: 原始数据表\n
+        :return:处理后的数据
+        """
+        table = []
         for original_row in base_table['results']:
             row = {'id': original_row['id']}  # 行id,这是系统的id不是显示的ID
+
+            if self.need_re_recursion:
+                page_svc = easyNotion(row['id'], self.__token, is_page=True, download_path=self.download_path)
+                row['page_content'] = page_svc.get_table()
+                self.__col_name[row['id']] = page_svc.get_col_name()
 
             for col in original_row['properties']:
                 if original_row['properties'][col]['type'] == 'unique_id':  # 处理ID列
@@ -98,8 +167,8 @@ class easyNotion:
                     else:
                         row[col] = ''
                     self.__col_name[col] = 'url'  # 列名称:列类型
-                else:  # 处理text列
-                    text = row[col] = original_row['properties'][col]['rich_text']
+                elif original_row['properties'][col]['type'] == 'text':  # 处理text列
+                    text = original_row['properties'][col]['rich_text']
                     if len(text) != 0:
                         row[col] = original_row['properties'][col]['rich_text'][0]['plain_text']
                     else:
@@ -107,9 +176,7 @@ class easyNotion:
 
                     self.__col_name[col] = 'text'  # 列名称:列类型
             table.append(row)
-
-        self.__table = table
-        return True
+        return table
 
     # 获得处理后的数据表,避免重复查询
     def get_table(self) -> List[Dict[str, str]]:
@@ -149,7 +216,8 @@ class easyNotion:
         return len(self.get_table())
 
     # 判断是否符合条件
-    def __is_match_condition(self, row: Dict[str, str], condition: Dict[str, str]) -> bool:
+    @staticmethod
+    def __is_match_condition(row: Dict[str, str], condition: Dict[str, str]) -> bool:
         """
         判断row是否符合条件condition,condition为正则表达式\n
         :param row: 行Dict格式
@@ -158,7 +226,7 @@ class easyNotion:
         """
 
         for i in condition:
-            if not re.match(row[i], condition[i]):  # 不符合正则则返回False
+            if not re.search(row[i], condition[i]):  # 不符合正则则返回False
                 return False
         else:
             return True
@@ -254,12 +322,12 @@ class easyNotion:
 
         payload = {
             "parent": {
-                "database_id": self.database_id
+                "notion_id": self.notion_id
             },
             "properties": payload
         }
 
-        res = self.__session.request("POST", self.baseUrl + 'pages', headers=self.headers, json=payload)
+        res = self.__session.request("POST", self.__baseUrl + 'pages', headers=self.__headers, json=payload)
 
         # 更新表
         self.__get_table(self.get_original_table())
@@ -281,7 +349,7 @@ class easyNotion:
 
         id = self.query(['id'], update_condition)[0]
 
-        ret = self.__session.request('PATCH', self.baseUrl + 'pages/' + id, headers=self.headers, json=payload)
+        ret = self.__session.request('PATCH', self.__baseUrl + 'pages/' + id, headers=self.__headers, json=payload)
 
         # 更新表
         if ret.ok:
@@ -311,7 +379,7 @@ class easyNotion:
                     id = row['id']
                     break
 
-        ret = self.__session.request("DELETE", self.baseUrl + 'blocks/' + id, headers=self.headers)
+        ret = self.__session.request("DELETE", self.__baseUrl + 'blocks/' + id, headers=self.__headers)
 
         # 更新表
         if ret.ok:
