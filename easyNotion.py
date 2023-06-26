@@ -113,13 +113,15 @@ class easyNotion:
                 image_name = re.search(r'.*/(.*\..*)\?.*', url).group(1)  # 得到文件名
                 # Check if the request was successful
                 if response.ok:
+                    if not os.path.exists(self.download_path):
+                        os.mkdir(self.download_path)
                     path = os.path.join(self.download_path, image_name)  # 得到下载路径
                     with open(path, "wb") as image_file:
                         image_file.write(response.content)  # 保存到本地
                     row['image_download_path'] = path
                 else:
                     row['image_download_path'] = 'wrong_request'
-
+                session.close()
                 self.__col_name[image_name] = 'image'
             elif original_row['type'] == 'paragraph':  # 文本类型
                 text = original_row['paragraph']['rich_text']
@@ -167,7 +169,7 @@ class easyNotion:
                     else:
                         row[col] = ''
                     self.__col_name[col] = 'url'  # 列名称:列类型
-                elif original_row['properties'][col]['type'] == 'text':  # 处理text列
+                elif original_row['properties'][col]['type'] == 'rich_text':  # 处理text列
                     text = original_row['properties'][col]['rich_text']
                     if len(text) != 0:
                         row[col] = original_row['properties'][col]['rich_text'][0]['plain_text']
@@ -322,7 +324,7 @@ class easyNotion:
 
         payload = {
             "parent": {
-                "notion_id": self.notion_id
+                "database_id": self.notion_id
             },
             "properties": payload
         }
