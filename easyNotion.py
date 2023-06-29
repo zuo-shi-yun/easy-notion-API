@@ -9,14 +9,16 @@ import requests
 
 class easyNotion:
     def __init__(self, notion_id: str, token: str, sort_key: List[str] = '', reverse: List[bool] = '',
-                 need_recursion: bool = False, download_path: str = '', is_page: bool = False, trust_env: bool = False):
+                 need_recursion: bool = False, need_download: bool = False, download_path: str = '',
+                 is_page: bool = False, trust_env: bool = False):
         """
         获得notion服务\n
         :param notion_id: 数据库ID\n
         :param token: 集成令牌\n
         :param sort_key: 排序的列,支持根据多列排序\n
         :param reverse: 默认升序,为True时降序\n
-        :param need_recursion: 是否需要递归获得页面的数据\n
+        :param need_recursion: 是否需要递归获得页面的数据,默认不需要\n
+        :param need_download: 是否需要下载到本地,默认不需要\n
         :param download_path: 若有文件保存到哪个目录中\n
         :param is_page: 是否为页面，默认为否\n
         :param trust_env: 是否关闭代理,默认关闭\n
@@ -26,8 +28,9 @@ class easyNotion:
         self.notion_id = notion_id
         # 请求头
         self.is_page = is_page
+        self.__need_download = need_download
         self.download_path = download_path
-        self.need_re_recursion = need_recursion
+        self.need_recursion = need_recursion
         self.__token = token
         self.__headers = {
             'Accept': 'application/json',
@@ -45,6 +48,16 @@ class easyNotion:
         # 数据表
         self.__table = []
         self.__col_name = {}
+
+    # 获得原始数据表
+    def get_original_table(self) -> json:
+        """
+        获得原始数据表\n
+        :return: 获得数据库中的全部的未处理数据,若成功返回json对象,结果按照no列递增排序,失败则返回错误代码\n
+        """
+        res = self.__get_original_response()
+        # 转为json对象
+        return json.loads(res.text)
 
     # 获得原始相应
     def __get_original_response(self) -> requests.Response:
@@ -69,15 +82,21 @@ class easyNotion:
 
         return res
 
-    # 获得原始数据表
-    def get_original_table(self) -> json:
+    # 获得处理后的数据表,避免重复查询
+    def get_table(self) -> List[Dict[str, str]]:
         """
-        获得原始数据表\n
-        :return: 获得数据库中的全部的未处理数据,若成功返回json对象,结果按照no列递增排序,失败则返回错误代码\n
+        获得处理后的数据表\n
+        :return: 处理后的数据表
         """
-        res = self.__get_original_response()
-        # 转为json对象
-        return json.loads(res.text)
+        # 已经有表则直接返回
+        if self.__table:
+            return copy.deepcopy(self.__table)
+
+        # 没有表则查询
+        base_table = self.get_original_table()  # 未处理的表
+        self.__get_table(base_table)
+
+        return copy.deepcopy(self.__table)
 
     # 根据原始表获得处理后的表
     def __get_table(self, base_table: json) -> bool:
@@ -100,25 +119,26 @@ class easyNotion:
         for original_row in base_table['results']:
             row = {'id': original_row['id']}
 
-            if self.need_re_recursion:
-                page_svc = easyNotion(row['id'], self.__token, is_page=True, download_path=self.download_path)
-                row['page_content'] = page_svc.get_table()
-                self.__col_name[row['id']] = page_svc.get_col_name()
+            # 需要递归获得页面数据
+            if self.need_recursion:
+                self.__get_recursion_data(row)
 
             if original_row['type'] == 'image':  # 图片类型
                 url = original_row['image']['file']['url']
                 session = requests.session()
                 session.trust_env = self.__session.trust_env
                 response = session.get(url)  # 下载文件
+                row['image_source_path'] = url
                 image_name = re.search(r'.*/(.*\..*)\?.*', url).group(1)  # 得到文件名
                 # Check if the request was successful
                 if response.ok:
-                    if not os.path.exists(self.download_path):
-                        os.mkdir(self.download_path)
-                    path = os.path.join(self.download_path, image_name)  # 得到下载路径
-                    with open(path, "wb") as image_file:
-                        image_file.write(response.content)  # 保存到本地
-                    row['image_download_path'] = path
+                    if self.__need_download:  # 需要下载到本地时才下载到本地
+                        if not os.path.exists(self.download_path):
+                            os.mkdir(self.download_path)
+                        path = os.path.join(self.download_path, image_name)  # 得到下载路径
+                        with open(path, "wb") as image_file:
+                            image_file.write(response.content)  # 保存到本地
+                        row['image_download_path'] = path
                 else:
                     row['image_download_path'] = 'wrong_request'
                 session.close()
@@ -145,10 +165,9 @@ class easyNotion:
         for original_row in base_table['results']:
             row = {'id': original_row['id']}  # 行id,这是系统的id不是显示的ID
 
-            if self.need_re_recursion:
-                page_svc = easyNotion(row['id'], self.__token, is_page=True, download_path=self.download_path)
-                row['page_content'] = page_svc.get_table()
-                self.__col_name[row['id']] = page_svc.get_col_name()
+            # 需要递归获得页面数据
+            if self.need_recursion:
+                self.__get_recursion_data(row)
 
             for col in original_row['properties']:
                 if original_row['properties'][col]['type'] == 'unique_id':  # 处理ID列
@@ -180,21 +199,11 @@ class easyNotion:
             table.append(row)
         return table
 
-    # 获得处理后的数据表,避免重复查询
-    def get_table(self) -> List[Dict[str, str]]:
-        """
-        获得处理后的数据表\n
-        :return: 处理后的数据表
-        """
-        # 已经有表则直接返回
-        if self.__table:
-            return copy.deepcopy(self.__table)
-
-        # 没有表则查询
-        base_table = self.get_original_table()  # 未处理的表
-        self.__get_table(base_table)
-
-        return copy.deepcopy(self.__table)
+    def __get_recursion_data(self, row: dict) -> None:
+        page_svc = easyNotion(row['id'], self.__token, is_page=True, need_download=self.__need_download,
+                              download_path=self.download_path)
+        row['page_content'] = page_svc.get_table()
+        self.__col_name[row['id']] = page_svc.get_col_name()
 
     # 获得列名称列表
     def get_col_name(self) -> Dict[str, str]:
@@ -216,22 +225,6 @@ class easyNotion:
         :return:返回总行数
         """
         return len(self.get_table())
-
-    # 判断是否符合条件
-    @staticmethod
-    def __is_match_condition(row: Dict[str, str], condition: Dict[str, str]) -> bool:
-        """
-        判断row是否符合条件condition,condition为正则表达式\n
-        :param row: 行Dict格式
-        :param condition: 条件,Dict格式
-        :return: 符合条件返回True，否则返回False
-        """
-
-        for i in condition:
-            if not re.search(row[i], condition[i]):  # 不符合正则则返回False
-                return False
-        else:
-            return True
 
     # 通用查询
     def query(self, query_col: List[str], query_condition: Dict[str, str] = '') -> list:
@@ -260,51 +253,21 @@ class easyNotion:
 
         return copy.deepcopy(ret)
 
-    # 得到各种类型数据的用于更新、插入数据的payload
-    def __get_payload(self, col_name: str, content: str) -> Dict[str, dict]:
+    # 判断是否符合条件
+    @staticmethod
+    def __is_match_condition(row: Dict[str, str], condition: Dict[str, str]) -> bool:
         """
-        得到各种类型的用于更新、插入数据的payload\n
-        :param col_name:列名称\n
-        :param content:要插入或更新的内容\n
-        :return:一个包含用于更新、插入的payload的Dict\n
+        判断row是否符合条件condition,condition为正则表达式\n
+        :param row: 行Dict格式
+        :param condition: 条件,Dict格式
+        :return: 符合条件返回True，否则返回False
         """
-        col_names = self.get_col_name()
 
-        if col_names[col_name] == 'title':  # 标题类型
-            return {
-                col_name: {
-                    "title": [
-                        {
-                            'type': 'text',
-                            'text': {'content': str(content)},
-                            "plain_text": str(content)
-                        }
-                    ]
-                }
-            }
-        elif col_names[col_name] == 'text':  # 文本类型
-            return {
-                col_name: {
-                    "type": "rich_text",
-                    "rich_text": [
-                        {
-                            "type": "text",
-                            "text": {
-                                "content": str(content)
-                            },
-                            "plain_text": str(content)
-                        }
-                    ]
-                }}
-        elif col_names[col_name] == 'url':  # url类型
-            return {
-                col_name: {
-                    'type': 'url',
-                    'url': str(content) if content else ' '
-                }
-            }
+        for i in condition:
+            if not re.search(row[i], condition[i]):  # 不符合正则则返回False
+                return False
         else:
-            return {}
+            return True
 
     def insert(self, data: Dict[str, str]) -> requests.models.Response:
         """
@@ -365,6 +328,52 @@ class easyNotion:
             self.__table = table
 
         return ret
+
+    # 得到各种类型数据的用于更新、插入数据的payload
+    def __get_payload(self, col_name: str, content: str) -> Dict[str, dict]:
+        """
+        得到各种类型的用于更新、插入数据的payload\n
+        :param col_name:列名称\n
+        :param content:要插入或更新的内容\n
+        :return:一个包含用于更新、插入的payload的Dict\n
+        """
+        col_names = self.get_col_name()
+
+        if col_names[col_name] == 'title':  # 标题类型
+            return {
+                col_name: {
+                    "title": [
+                        {
+                            'type': 'text',
+                            'text': {'content': str(content)},
+                            "plain_text": str(content)
+                        }
+                    ]
+                }
+            }
+        elif col_names[col_name] == 'text':  # 文本类型
+            return {
+                col_name: {
+                    "type": "rich_text",
+                    "rich_text": [
+                        {
+                            "type": "text",
+                            "text": {
+                                "content": str(content)
+                            },
+                            "plain_text": str(content)
+                        }
+                    ]
+                }}
+        elif col_names[col_name] == 'url':  # url类型
+            return {
+                col_name: {
+                    'type': 'url',
+                    'url': str(content) if content else ' '
+                }
+            }
+        else:
+            return {}
 
     # 根据col字段删除行
     def delete(self, delete_condition: Dict[str, str]) -> requests.models.Response:
