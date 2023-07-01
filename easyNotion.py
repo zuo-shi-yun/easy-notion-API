@@ -2,7 +2,7 @@ import copy
 import json
 import os.path
 import re
-from typing import Dict, List
+from typing import Dict, List, Union
 
 import requests
 
@@ -226,8 +226,10 @@ class easyNotion:
         """
         return len(self.get_table())
 
+    # 判断是否符合条件
+
     # 通用查询
-    def query(self, query_col: List[str], query_condition: Dict[str, str] = '') -> list:
+    def query(self, query_col: List[str], query_condition: Dict[str, Union[str, re.Pattern]] = '') -> list:
         """
         根据query_condition条件对数据表的query_col列进行查询\n
         :param query_col:要查询的列名,为空列表时查询所有的列\n
@@ -253,19 +255,24 @@ class easyNotion:
 
         return copy.deepcopy(ret)
 
-    # 判断是否符合条件
     @staticmethod
-    def __is_match_condition(row: Dict[str, str], condition: Dict[str, str]) -> bool:
+    def __is_match_condition(row: Dict[str, str], condition: Dict[str, Union[str, re.Pattern]]) -> bool:
         """
         判断row是否符合条件condition,condition为正则表达式\n
         :param row: 行Dict格式
-        :param condition: 条件,Dict格式
+        :param condition: 条件,Dict格式,支持正则
         :return: 符合条件返回True，否则返回False
         """
 
         for i in condition:
-            if not re.search(row[i], condition[i]):  # 不符合正则则返回False
-                return False
+            if type(condition[i]) == re.Pattern:  # 正则表达式使用正则处理
+                if not re.search(condition[i], row[i]):  # 不符合正则则返回False
+                    return False
+            else:  # 普通字符串做普通处理
+                row[i] = '\n'.join(row[i].split('\r\n'))
+                condition[i] = '\n'.join(condition[i].split('\r\n'))
+                if row[i] != condition[i]:  # 不相等返回False
+                    return False
         else:
             return True
 
@@ -300,7 +307,8 @@ class easyNotion:
         return res
 
     # 根据col更新某一行的数据
-    def update(self, update_condition: Dict[str, str], update_data: Dict[str, str]) -> requests.models.Response:
+    def update(self, update_condition: Dict[str, str],
+               update_data: Dict[str, Union[str, re.Pattern]]) -> requests.models.Response:
         """
         根据col列的content内容找到行,将行的update_col列更新为update_content,更新列的类型只能为文本\n
         :param update_condition: 更新条件,{'列名':'列值'}\n
@@ -376,7 +384,7 @@ class easyNotion:
             return {}
 
     # 根据col字段删除行
-    def delete(self, delete_condition: Dict[str, str]) -> requests.models.Response:
+    def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> requests.models.Response:
         """
         根据col列的content内容\n
         :param delete_condition: 删除条件,{'列名':'列值'}\n
