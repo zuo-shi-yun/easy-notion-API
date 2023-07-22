@@ -55,12 +55,6 @@ class easyNotion:
         获得原始数据表\n
         :return: 获得数据库中的全部的未处理数据,若成功返回json对象,结果按照no列递增排序,失败则返回错误代码\n
         """
-        res = self.__get_original_response()
-        # 转为json对象
-        return json.loads(res.text)
-
-    # 获得原始相应
-    def __get_original_response(self) -> requests.Response:
         payload = {'sorts': []}
 
         # 排序请求
@@ -69,18 +63,39 @@ class easyNotion:
                 {'property': sort_col[0],
                  'direction': 'descending' if sort_col[1] else 'ascending'})
 
-        # 发送请求
-        if self.is_page:  # 页面类型
-            res = self.__session.request("GET", self.__baseUrl + 'blocks/' + self.notion_id + '/children?page_size=100',
-                                         headers=self.__headers)
-        else:  # 数据库类型
-            res = self.__session.request("POST", self.__baseUrl + 'databases/' + self.notion_id + '/query',
-                                         json=payload, headers=self.__headers)
+        start_cursor = None
+        original_table = {}
 
-        if res.status_code != 200:
-            raise Exception('An error occurred:网络链接失败' + str(res.text))
+        while True:
+            if start_cursor:
+                payload["start_cursor"] = start_cursor
 
-        return res
+            # 发送请求
+            if self.is_page:  # 页面类型
+                res = self.__session.request("GET",
+                                             self.__baseUrl + 'blocks/' + self.notion_id + '/children?page_size=100',
+                                             headers=self.__headers)
+            else:  # 数据库类型
+                res = self.__session.request("POST", self.__baseUrl + 'databases/' + self.notion_id + '/query',
+                                             json=payload, headers=self.__headers)
+
+            if res.status_code != 200:
+                raise Exception('An error occurred:网络链接失败' + str(res.text))
+
+            data = res.json()  # 转为dict格式
+            # 判断原始表是为为空，不为空则追加
+            if original_table:
+                original_table['results'].extend(data['results'])
+            else:
+                original_table = data
+
+            if not data.get("has_more"):  # 没有后续则跳出循环
+                break
+
+            # 记录分页位置
+            start_cursor = data["next_cursor"]
+
+        return original_table
 
     # 获得处理后的数据表,避免重复查询
     def get_table(self) -> List[Dict[str, str]]:
@@ -107,9 +122,9 @@ class easyNotion:
         """
         # 从原始表中获得数据
         if self.is_page:
-            self.__table = self.__get_page_data(base_table)
+            self.__table.extend(self.__get_page_data(base_table))
         else:
-            self.__table = self.__get_database_data(base_table)
+            self.__table.extend(self.__get_database_data(base_table))
 
         return True
 
