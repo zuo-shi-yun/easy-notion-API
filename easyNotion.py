@@ -171,7 +171,9 @@ class easyNotion:
 
             for col in original_row['properties']:
                 if original_row['properties'][col]['type'] == 'unique_id':  # 处理ID列
-                    row[col] = original_row['properties'][col]['unique_id']['prefix'] + '-' + str(
+                    row[col] = original_row['properties'][col]['unique_id']['prefix'] + '-' + str(  # 若没有前缀则只要数字
+                        original_row['properties'][col]['unique_id']['number']) if \
+                        original_row['properties'][col]['unique_id']['prefix'] else str(
                         original_row['properties'][col]['unique_id']['number'])
                     self.__col_name[col] = 'ID'  # 列名称:列类型
                 elif original_row['properties'][col]['type'] == 'title':  # 处理title列
