@@ -137,11 +137,11 @@ class easyNotion:
     @staticmethod
     def retry_decorator(max_retries=3):
         def outer(func):
-            def inner(*args, **kwargs):
+            def inner(self, *args, **kwargs):
                 exception = None
                 for i in range(max_retries):
                     try:
-                        return func(*args, **kwargs)
+                        return func(self, *args, **kwargs)
                     except Exception as e:
                         exception = e
                 raise exception
@@ -151,7 +151,7 @@ class easyNotion:
         return outer
 
     # 获得原始数据表
-    @retry_decorator
+    @retry_decorator()
     def get_original_table(self) -> json:
         """
         获得原始数据表\n
@@ -231,7 +231,6 @@ class easyNotion:
         return True
 
     # 获得页面中的数据列表
-    @retry_decorator
     def __get_page_data(self, base_table: json) -> List[Dict[str, str]]:
         table = []
         for original_row in base_table['results']:
@@ -396,7 +395,7 @@ class easyNotion:
         else:
             return True
 
-    @retry_decorator
+    @retry_decorator()
     def insert(self, data: Dict[str, str]) -> requests.models.Response:
         """
         插入数据\n
@@ -428,7 +427,7 @@ class easyNotion:
         return res
 
     # 根据col更新某一行的数据
-    @retry_decorator
+    @retry_decorator()
     def update(self, update_data: Dict[str, Union[str, re.Pattern]],
                update_condition: Dict[str, str]) -> requests.models.Response:
         """
@@ -506,7 +505,7 @@ class easyNotion:
             return {}
 
     # 根据col字段删除行
-    @retry_decorator
+    @retry_decorator()
     def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> requests.models.Response:
         """
         根据col列的content内容\n
