@@ -10,7 +10,7 @@ import requests
 class easyNotion:
     def __init__(self, notion_id: str, token: str, sort_key: List[str] = '', reverse: List[bool] = '',
                  need_recursion: bool = False, need_download: bool = False, download_path: str = '',
-                 is_page: bool = False, trust_env: bool = False):
+                 is_page: bool = False, trust_env: bool = False, get_all=True):
         """
         获得notion服务\n
         :param notion_id: 数据库ID\n
@@ -22,6 +22,7 @@ class easyNotion:
         :param download_path: 若有文件保存到哪个目录中\n
         :param is_page: 是否为页面，默认为否\n
         :param trust_env: 是否关闭代理,默认关闭\n
+        :param get_all: 是否获取所有数据，默认获取\n
         """
         # 基础url
         # 数据库ID
@@ -48,6 +49,7 @@ class easyNotion:
         # 数据表
         self.__table = []
         self.__col_name = {}
+        self.get_all = get_all
 
     # 获得原始数据表
     def get_original_table(self) -> json:
@@ -89,7 +91,7 @@ class easyNotion:
             else:
                 original_table = data
 
-            if not data.get("has_more"):  # 没有后续则跳出循环
+            if not data.get("has_more") or not self.get_all:  # 没有后续或不得到全部表则跳出循环
                 break
 
             # 记录分页位置
