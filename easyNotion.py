@@ -40,6 +40,7 @@ class easyNotion:
             'Notion-Version': '2022-06-28',
             'Content-Type': 'application/json',
             'Authorization': 'Bearer %s' % token,
+            'Connection': 'close',
             'Cookie': '__cf_bm=uxsliE4EFVpT5YkTZ6ACr1jH2vu1TjkfG1gTPXYDyKg-1683367680-0-AVbHMiNx95PBmx3aRCHSTZhivPqUb/Chgy2MTqqPTAkVweNB6jjhKyixXIak85+bXiotNY0RQCRRi3XWtGQ4L4s='
         }
         headers_list = [
