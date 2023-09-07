@@ -34,6 +34,7 @@ def timeout(retry_time: int, timeout: int):
                 if not t.is_alive():
                     break
                 print(f'超时重试{i + 1}')
+                self.update_random_useragent_and_token()  # 更新请求代理
             else:  # 当循环正常结束（没有被break打断）时执行else语句
                 raise TimeoutError("函数超时")
 
@@ -53,6 +54,7 @@ def retry_decorator(max_retries=3):
                 try:
                     return func(self, *args, **kwargs)
                 except Exception as e:
+                    self.update_random_useragent_and_token()  # 更新请求代理
                     print(f'发生异常,第{i + 1}次重试,{e}')
                     exception = e
             raise exception
@@ -63,7 +65,7 @@ def retry_decorator(max_retries=3):
 
 
 class easyNotion:
-    def __init__(self, notion_id: str, token: str, sort_key: List[str] = '', reverse: List[bool] = '',
+    def __init__(self, notion_id: str, token: Union[str, List[str]], sort_key: List[str] = '', reverse: List[bool] = '',
                  need_recursion: bool = False, need_download: bool = False, download_path: str = '',
                  is_page: bool = False, trust_env: bool = False, get_all=True):
         """
@@ -87,16 +89,17 @@ class easyNotion:
         self.__need_download = need_download
         self.download_path = download_path
         self.need_recursion = need_recursion
-        self.__token = token
+        self.__all_token = token
+        self.__token = ''
         # 请求头
         self.__headers = {
             'Accept': 'application/json',
             'Notion-Version': '2022-06-28',
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer %s' % token,
             'Connection': 'close',
             'Cookie': '__cf_bm=uxsliE4EFVpT5YkTZ6ACr1jH2vu1TjkfG1gTPXYDyKg-1683367680-0-AVbHMiNx95PBmx3aRCHSTZhivPqUb/Chgy2MTqqPTAkVweNB6jjhKyixXIak85+bXiotNY0RQCRRi3XWtGQ4L4s='
         }
+        self.update_random_useragent_and_token()  # 更新请求代理
         self.__baseUrl = 'https://api.notion.com/v1/'
         self.__sort_key = sort_key
         self.__reverse = reverse if reverse else [False] * len(sort_key)
@@ -109,10 +112,7 @@ class easyNotion:
         self.get_all = get_all
 
     # 随机添加一个请求代理
-    def update_random_useragent_header(self) -> None:
-        if 'user-agent' in self.__headers:
-            del (self.__headers['user-agent'])  # 删除原有头
-
+    def update_random_useragent_and_token(self) -> None:
         headers_list = [
             {
                 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
@@ -189,9 +189,25 @@ class easyNotion:
             }, {
                 'user-agent': 'Mozilla/5.0 (iPad; CPU OS 11_0 like Mac OS X) AppleWebKit/604.1.34 (KHTML, like Gecko) Version/11.0 Mobile/15A5341f Safari/604.1'
             }
-        ]
+        ]  # 全部请求头
 
-        self.__headers.update(random.choice(headers_list))  # 更新头
+        if 'user-agent' in self.__headers:
+            new_headers_list = [item for item in headers_list if item != self.__headers['user-agent']]  # 不包含原有头的全部投
+            del (self.__headers['user-agent'])  # 删除原有头
+            self.__headers.update(random.choice(new_headers_list))  # 更新头
+        else:
+            self.__headers.update(random.choice(headers_list))  # 添加头
+
+        if 'Authorization' in self.__headers:
+            del (self.__headers['Authorization'])  # 删除原有头
+
+        if type(self.__all_token) == list:
+            new_token_list = [item for item in self.__all_token if item != self.__token]  # 新token
+            self.__token = random.choice(new_token_list)
+            self.__headers.update({'Authorization': 'Bearer %s' % self.__token})
+        else:
+            self.__token = self.__all_token
+            self.__headers.update({'Authorization': 'Bearer %s' % self.__token})
 
     # 获得原始数据表
     @retry_decorator()
@@ -215,8 +231,6 @@ class easyNotion:
         while True:
             if start_cursor:
                 payload["start_cursor"] = start_cursor
-
-            self.update_random_useragent_header()  # 更新请求代理
 
             # 发送请求
             if self.is_page:  # 页面类型
@@ -492,8 +506,6 @@ class easyNotion:
             "properties": payload
         }
 
-        self.update_random_useragent_header()  # 更新请求代理
-
         res = self.__session.request("POST", self.__baseUrl + 'pages', headers=self.__headers, json=payload)
 
         # 更新表
@@ -541,8 +553,6 @@ class easyNotion:
             payload['properties'].update(self.__get_payload(col_name, update_data[col_name]))
 
         id = self.query(['id'], update_condition)[0]
-
-        self.update_random_useragent_header()  # 更新请求代理
 
         ret = self.__session.request('PATCH', self.__baseUrl + 'pages/' + id, headers=self.__headers, json=payload)
 
@@ -631,8 +641,6 @@ class easyNotion:
                 if row[condition] == delete_condition[condition]:
                     id = row['id']
                     break
-
-        self.update_random_useragent_header()  # 更新请求代理
 
         ret = self.__session.request("DELETE", self.__baseUrl + 'blocks/' + id, headers=self.__headers)
 
