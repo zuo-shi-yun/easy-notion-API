@@ -10,17 +10,6 @@ import requests
 
 from blocksModel import *
 
-locks = {}  # 线程锁
-
-
-# 线程锁
-def synchronized(func):
-    def wrapper(self, *args, **kwargs):
-        with self.lock:
-            return func(self, *args, **kwargs)
-
-    return wrapper
-
 
 # 超时异常包裹
 def timeout(retry_time: int, timeout: int):
@@ -121,10 +110,6 @@ class easyNotion:
         self.__table = []
         self.__col_name = {}
         self.get_all = get_all
-        # 线程锁
-        if self.notion_id not in locks:
-            locks[self.notion_id] = threading.Lock()
-        self.lock = locks[self.notion_id]
 
     # 随机添加一个请求代理
     def update_random_useragent_and_token(self) -> None:
@@ -450,7 +435,6 @@ class easyNotion:
     # 判断是否符合条件
 
     # 通用查询
-    @synchronized
     def query(self, query_col: List[str], query_condition: Dict[str, Union[str, re.Pattern]] = '') -> list:
         """
         根据query_condition条件对数据表的query_col列进行查询\n
@@ -498,7 +482,6 @@ class easyNotion:
         else:
             return True
 
-    @synchronized
     @retry_decorator()
     def insert(self, data: Dict[str, str]) -> requests.models.Response:
         """
@@ -555,7 +538,6 @@ class easyNotion:
         return res
 
     # 根据col更新某一行的数据
-    @synchronized
     @retry_decorator()
     def update(self, update_data: Dict[str, str],
                update_condition: Dict[str, Union[str, re.Pattern]]) -> requests.models.Response:
@@ -623,8 +605,8 @@ class easyNotion:
         elif col_names[col_name] == 'text':  # 文本类型
             return {
                 col_name: {
-                    "type": "RichText",
-                    "RichText": [
+                    "type": "rich_text",
+                    "rich_text": [
                         {
                             "type": "text",
                             "text": {
@@ -645,7 +627,6 @@ class easyNotion:
             return {}
 
     # 根据col字段删除行
-    @synchronized
     @retry_decorator()
     def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> requests.models.Response:
         """
