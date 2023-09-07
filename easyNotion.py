@@ -3,9 +3,63 @@ import json
 import os.path
 import random
 import re
-from typing import Dict, List, Union
+import threading
+from typing import Dict
 
 import requests
+
+from blocksModel import *
+
+
+# 超时异常包裹
+def timeout(retry_time: int, timeout: int):
+    """
+    超时包裹器
+    :param retry_time: 超时重试次数
+    :param timeout: 超时时间,单位:秒
+    :return:
+    """
+
+    def decorator(func):
+        def wrapper(self, *args, **kwargs):
+            for i in range(retry_time):
+                result_holder = [None]
+
+                def target_func(*args, **kwargs):
+                    result_holder[0] = func(*args, **kwargs)
+
+                t = threading.Thread(target=target_func, args=(self,) + args, kwargs=kwargs)
+                t.start()
+                t.join(timeout)  # 超时时间,单位:秒
+                if not t.is_alive():
+                    break
+                print(f'超时重试{i + 1}')
+            else:  # 当循环正常结束（没有被break打断）时执行else语句
+                raise TimeoutError("函数超时")
+
+            return result_holder[0]
+
+        return wrapper
+
+    return decorator
+
+
+# 网络连接异常包裹
+def retry_decorator(max_retries=3):
+    def outer(func):
+        def inner(self, *args, **kwargs):
+            exception = None
+            for i in range(max_retries):
+                try:
+                    return func(self, *args, **kwargs)
+                except Exception as e:
+                    print(f'发生异常,第{i + 1}次重试,{e}')
+                    exception = e
+            raise exception
+
+        return inner
+
+    return outer
 
 
 class easyNotion:
@@ -43,6 +97,22 @@ class easyNotion:
             'Connection': 'close',
             'Cookie': '__cf_bm=uxsliE4EFVpT5YkTZ6ACr1jH2vu1TjkfG1gTPXYDyKg-1683367680-0-AVbHMiNx95PBmx3aRCHSTZhivPqUb/Chgy2MTqqPTAkVweNB6jjhKyixXIak85+bXiotNY0RQCRRi3XWtGQ4L4s='
         }
+        self.__baseUrl = 'https://api.notion.com/v1/'
+        self.__sort_key = sort_key
+        self.__reverse = reverse if reverse else [False] * len(sort_key)
+        self.__session = requests.Session()
+        # 关闭代理
+        self.__session.trust_env = trust_env
+        # 数据表
+        self.__table = []
+        self.__col_name = {}
+        self.get_all = get_all
+
+    # 随机添加一个请求代理
+    def update_random_useragent_header(self) -> None:
+        if 'user-agent' in self.__headers:
+            del (self.__headers['user-agent'])  # 删除原有头
+
         headers_list = [
             {
                 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
@@ -120,38 +190,12 @@ class easyNotion:
                 'user-agent': 'Mozilla/5.0 (iPad; CPU OS 11_0 like Mac OS X) AppleWebKit/604.1.34 (KHTML, like Gecko) Version/11.0 Mobile/15A5341f Safari/604.1'
             }
         ]
-        # 随即添加一个代理
-        self.__headers.update(random.choice(headers_list))
-        self.__baseUrl = 'https://api.notion.com/v1/'
-        self.__sort_key = sort_key
-        self.__reverse = reverse if reverse else [False] * len(sort_key)
-        self.__session = requests.Session()
-        # 关闭代理
-        self.__session.trust_env = trust_env
-        # 数据表
-        self.__table = []
-        self.__col_name = {}
-        self.get_all = get_all
 
-    # 异常包裹
-    @staticmethod
-    def retry_decorator(max_retries=3):
-        def outer(func):
-            def inner(self, *args, **kwargs):
-                exception = None
-                for i in range(max_retries):
-                    try:
-                        return func(self, *args, **kwargs)
-                    except Exception as e:
-                        exception = e
-                raise exception
-
-            return inner
-
-        return outer
+        self.__headers.update(random.choice(headers_list))  # 更新头
 
     # 获得原始数据表
     @retry_decorator()
+    @timeout(retry_time=2, timeout=120)
     def get_original_table(self) -> json:
         """
         获得原始数据表\n
@@ -172,6 +216,8 @@ class easyNotion:
             if start_cursor:
                 payload["start_cursor"] = start_cursor
 
+            self.update_random_useragent_header()  # 更新请求代理
+
             # 发送请求
             if self.is_page:  # 页面类型
                 res = self.__session.request("GET",
@@ -181,7 +227,7 @@ class easyNotion:
                 res = self.__session.request("POST", self.__baseUrl + 'databases/' + self.notion_id + '/query',
                                              json=payload, headers=self.__headers)
 
-            if res.status_code != 200:
+            if not res.ok:
                 raise Exception('An error occurred:网络链接失败' + str(res.text))
 
             data = res.json()  # 转为dict格式
@@ -230,15 +276,33 @@ class easyNotion:
 
         return True
 
+    @staticmethod
+    def __get_rich_text_content(row: dict) -> Block:
+        text_type = row['type']
+        all_rich_text = row[text_type]['rich_text']
+
+        ret = []
+        for rich_text in all_rich_text:
+            if rich_text['type'] == 'mention':
+                temp = Mention(row['id'], rich_text['href'], row['parent']['block_id'])
+            else:
+                href = None
+                if 'href' in rich_text:
+                    href = rich_text['href']
+
+                temp = RichText(text_type, row['id'], row['parent'][row['parent']['type']], rich_text['annotations'],
+                                href, rich_text['plain_text'])
+            ret.append(temp)
+
+        return Block(ret)
+
     # 获得页面中的数据列表
     def __get_page_data(self, base_table: json) -> List[Dict[str, str]]:
         table = []
         for original_row in base_table['results']:
             row = {'id': original_row['id']}
 
-            # 需要递归获得页面数据
-            if self.need_recursion:
-                self.__get_recursion_data(row)
+            rich_text_type = ['paragraph', 'heading_2', 'toggle', 'bulleted_list_item', 'callout']
 
             if original_row['type'] == 'image':  # 图片类型
                 url = original_row['image']['file']['url']
@@ -260,13 +324,20 @@ class easyNotion:
                     row['image_download_path'] = 'wrong_request'
                 session.close()
                 self.__col_name[image_name] = 'image'
-            elif original_row['type'] == 'paragraph':  # 文本类型
-                text = original_row['paragraph']['rich_text']
-                if len(text) != 0:
-                    row['paragraph'] = original_row['paragraph']['rich_text'][0]['plain_text']
-                else:
-                    row['paragraph'] = ''
-                self.__col_name[row['id']] = 'paragraph'
+            elif original_row['type'] in rich_text_type:  # 是富文本类型
+                row['block'] = self.__get_rich_text_content(original_row)
+
+            elif original_row['type'] == 'link_preview':  # github大图预览
+                row['block'] = LinkPreview(original_row['id'], original_row['link_preview']['url'],
+                                           original_row['parent']['block_id'])
+
+            elif original_row['type'] == 'divider':  # 分割线只保留ID
+                row['block'] = Divider(original_row['id'], original_row['parent']['block_id'])
+
+            # 需要递归获得页面数据
+            if self.need_recursion and original_row['has_children']:
+                self.__get_recursion_data(row)
+
             table.append(row)
 
         return table
@@ -281,10 +352,6 @@ class easyNotion:
         table = []
         for original_row in base_table['results']:
             row = {'id': original_row['id']}  # 行id,这是系统的id不是显示的ID
-
-            # 需要递归获得页面数据
-            if self.need_recursion:
-                self.__get_recursion_data(row)
 
             for col in original_row['properties']:
                 if original_row['properties'][col]['type'] == 'unique_id':  # 处理ID列
@@ -316,13 +383,19 @@ class easyNotion:
 
                     self.__col_name[col] = 'text'  # 列名称:列类型
             table.append(row)
+
+            # 需要递归获得页面数据
+            if self.need_recursion:
+                self.__get_recursion_data(row)
         return table
 
     def __get_recursion_data(self, row: dict) -> None:
         page_svc = easyNotion(row['id'], self.__token, is_page=True, need_download=self.__need_download,
-                              download_path=self.download_path)
-        row['page_content'] = page_svc.get_table()
+                              download_path=self.download_path, need_recursion=True)
+        row['son_blocks'] = page_svc.get_table()
+
         self.__col_name[row['id']] = page_svc.get_col_name()
+        page_svc.close_session()
 
     # 获得列名称列表
     def get_col_name(self) -> Dict[str, str]:
@@ -419,6 +492,8 @@ class easyNotion:
             "properties": payload
         }
 
+        self.update_random_useragent_header()  # 更新请求代理
+
         res = self.__session.request("POST", self.__baseUrl + 'pages', headers=self.__headers, json=payload)
 
         # 更新表
@@ -426,10 +501,34 @@ class easyNotion:
 
         return res
 
+    # 插入页面数据
+    @retry_decorator()
+    def insert_page(self, block: Union[Divider, Mention, LinkPreview, RichText, Block]) -> requests.models.Response:
+        """
+        插入页面数据
+        :param block: 富文本块
+        """
+
+        payload = {
+            'object': 'block',
+            'type': block.text_type,
+        }
+
+        payload.update(block.get_payload())
+
+        payload = {
+            'children': [payload]
+        }
+        print(payload)
+        res = self.__session.patch(self.__baseUrl + 'blocks/' + block.parent_id + '/children', headers=self.__headers,
+                                   json=payload)
+
+        return res
+
     # 根据col更新某一行的数据
     @retry_decorator()
-    def update(self, update_data: Dict[str, Union[str, re.Pattern]],
-               update_condition: Dict[str, str]) -> requests.models.Response:
+    def update(self, update_data: Dict[str, str],
+               update_condition: Dict[str, Union[str, re.Pattern]]) -> requests.models.Response:
         """
         根据col列的content内容找到行,将行的update_col列更新为update_content,更新列的类型只能为文本\n
         :param update_condition: 更新条件,{'列名':'列值'}\n
@@ -442,6 +541,8 @@ class easyNotion:
             payload['properties'].update(self.__get_payload(col_name, update_data[col_name]))
 
         id = self.query(['id'], update_condition)[0]
+
+        self.update_random_useragent_header()  # 更新请求代理
 
         ret = self.__session.request('PATCH', self.__baseUrl + 'pages/' + id, headers=self.__headers, json=payload)
 
@@ -457,6 +558,17 @@ class easyNotion:
             self.__table = table
 
         return ret
+
+    # 更新页面中的块
+    def update_page(self, block: Union[Divider, Mention, LinkPreview, RichText]):
+        return self.__session.patch(self.__baseUrl + 'blocks/' + block.parent_id, headers=self.__headers,
+                                    json=block.get_payload())
+
+        # 删除页面中的块
+
+    @retry_decorator()
+    def delete_page(self, id: str):
+        return self.__session.delete(self.__baseUrl + 'blocks/' + id, headers=self.__headers)
 
     # 得到各种类型数据的用于更新、插入数据的payload
     def __get_payload(self, col_name: str, content: str) -> Dict[str, dict]:
@@ -483,8 +595,8 @@ class easyNotion:
         elif col_names[col_name] == 'text':  # 文本类型
             return {
                 col_name: {
-                    "type": "rich_text",
-                    "rich_text": [
+                    "type": "RichText",
+                    "RichText": [
                         {
                             "type": "text",
                             "text": {
@@ -519,6 +631,8 @@ class easyNotion:
                 if row[condition] == delete_condition[condition]:
                     id = row['id']
                     break
+
+        self.update_random_useragent_header()  # 更新请求代理
 
         ret = self.__session.request("DELETE", self.__baseUrl + 'blocks/' + id, headers=self.__headers)
 
