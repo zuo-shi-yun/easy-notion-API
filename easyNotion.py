@@ -4,6 +4,7 @@ import os.path
 import random
 import re
 import threading
+from pprint import pprint
 from typing import Dict
 
 import requests
@@ -344,9 +345,12 @@ class easyNotion:
             elif original_row['type'] == 'link_preview':  # github大图预览
                 row['block'] = LinkPreview(original_row['id'], original_row['link_preview']['url'],
                                            original_row['parent']['block_id'])
-
             elif original_row['type'] == 'divider':  # 分割线只保留ID
                 row['block'] = Divider(original_row['id'], original_row['parent']['block_id'])
+            elif original_row['type'] == 'column':  # 列
+                row['block'] = Column(original_row['id'], original_row['parent']['block_id'])
+            elif original_row['type'] == 'column_list':  # 列列表
+                row['block'] = ColumnList(original_row['id'], original_row['parent']['block_id'])
 
             # 需要递归获得页面数据
             if self.need_recursion and original_row['has_children']:
@@ -531,7 +535,7 @@ class easyNotion:
         payload = {
             'children': [payload]
         }
-        print(payload)
+
         res = self.__session.patch(self.__baseUrl + 'blocks/' + block.parent_id + '/children', headers=self.__headers,
                                    json=payload)
 
@@ -571,9 +575,9 @@ class easyNotion:
 
     # 更新页面中的块
     def update_page(self, block: Union[Divider, Mention, LinkPreview, RichText]):
-        return self.__session.patch(self.__baseUrl + 'blocks/' + block.parent_id, headers=self.__headers,
+        pprint(block.get_payload())
+        return self.__session.patch(self.__baseUrl + 'blocks/' + block.id, headers=self.__headers,
                                     json=block.get_payload())
-
         # 删除页面中的块
 
     @retry_decorator()

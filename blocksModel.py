@@ -1,6 +1,22 @@
 from typing import List, Union
 
 
+# 列
+class Column:
+    def __init__(self, id: str, parent_id: str):
+        self.id = id
+        self.parent_id = parent_id
+        self.text_type = 'column'
+
+
+# 列列表
+class ColumnList:
+    def __init__(self, id: str, parent_id: str):
+        self.id = id
+        self.parent_id = parent_id
+        self.text_type = 'column_list'
+
+
 # 分割线
 class Divider:
     def __init__(self, id: str, parent_id: str):
