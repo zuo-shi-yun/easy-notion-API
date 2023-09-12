@@ -271,7 +271,10 @@ class easyNotion:
             return copy.deepcopy(self.__table)
 
         # 没有表则查询
-        base_table = self.get_original_table()  # 未处理的表
+        base_table = {}
+        while 'results' not in base_table:  # 避免查询错误
+            base_table = self.get_original_table()  # 未处理的表
+
         self.__get_table(base_table)
 
         return copy.deepcopy(self.__table)
