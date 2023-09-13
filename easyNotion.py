@@ -271,7 +271,7 @@ class easyNotion:
 
         # 没有表则查询
         base_table = {}
-        while 'results' not in base_table:  # 避免查询错误
+        while type(base_table) is not dict or 'results' not in base_table:  # 避免查询错误
             base_table = self.get_original_table()  # 未处理的表
 
         self.__get_table(base_table)
