@@ -4,7 +4,6 @@ import os.path
 import random
 import re
 import threading
-from pprint import pprint
 from typing import Dict
 
 import requests
@@ -522,6 +521,7 @@ class easyNotion:
 
     # 插入页面数据
     @retry_decorator()
+    @timeout(retry_time=2, timeout=30)
     def insert_page(self, block: Union[Divider, Mention, LinkPreview, RichText, Block]) -> requests.models.Response:
         """
         插入页面数据
@@ -577,13 +577,15 @@ class easyNotion:
         return ret
 
     # 更新页面中的块
+    @timeout(retry_time=2, timeout=30)
     def update_page(self, block: Union[Divider, Mention, LinkPreview, RichText]):
-        pprint(block.get_payload())
+
         return self.__session.patch(self.__baseUrl + 'blocks/' + block.id, headers=self.__headers,
                                     json=block.get_payload())
         # 删除页面中的块
 
     @retry_decorator()
+    @timeout(retry_time=2, timeout=30)
     def delete_page(self, id: str):
         return self.__session.delete(self.__baseUrl + 'blocks/' + id, headers=self.__headers)
 
