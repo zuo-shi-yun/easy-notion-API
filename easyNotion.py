@@ -547,7 +547,7 @@ class easyNotion:
     # 根据col更新某一行的数据
     @retry_decorator()
     def update(self, update_data: Dict[str, str],
-               update_condition: Dict[str, Union[str, re.Pattern]]) -> requests.models.Response:
+               update_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]:
         """
         根据col列的content内容找到行,将行的update_col列更新为update_content,更新列的类型只能为文本\n
         :param update_condition: 更新条件,{'列名':'列值'}\n
@@ -559,18 +559,21 @@ class easyNotion:
         for col_name in update_data:
             payload['properties'].update(self.__get_payload(col_name, update_data[col_name]))
 
-        id = self.query(['id'], update_condition)[0]
+        id_list = self.query(['id'], update_condition)
 
-        ret = self.__session.request('PATCH', self.__baseUrl + 'pages/' + id, headers=self.__headers, json=payload)
+        ret = []
+        for id in id_list:
+            temp_ret = self.__session.request('PATCH', self.__baseUrl + 'pages/' + id, headers=self.__headers,
+                                              json=payload)
+            ret.append(temp_ret)
 
         # 更新表
-        if ret.ok:
+        if len(ret):
             table = self.get_table()
             for row in table:  # 遍历表,找到更新的行
-                if row['id'] == id:
+                if row['id'] in id_list and ret[id_list.index(row['id'])].ok:  # 只有成功更新的才更新表:
                     for col_name in update_data:
                         row[col_name] = update_data[col_name]
-                break
 
             self.__table = table
 
@@ -637,29 +640,25 @@ class easyNotion:
 
     # 根据col字段删除行
     @retry_decorator()
-    def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> requests.models.Response:
+    def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]:
         """
         根据col列的content内容\n
         :param delete_condition: 删除条件,{'列名':'列值'}\n
         :return:返回响应对象
         """
-        id = ''
+        id_list = self.query(['id'], delete_condition)
 
-        for row in self.get_table():
-            for condition in delete_condition:  # 找到指定行
-                if row[condition] == delete_condition[condition]:
-                    id = row['id']
-                    break
-
-        ret = self.__session.request("DELETE", self.__baseUrl + 'blocks/' + id, headers=self.__headers)
+        ret = []
+        for id in id_list:
+            temp_ret = self.__session.request("DELETE", self.__baseUrl + 'blocks/' + id, headers=self.__headers)
+            ret.append(temp_ret)
 
         # 更新表
-        if ret.ok:
+        if len(ret):
             table = self.get_table()
             for row in table:
-                if row['id'] == id:
+                if row['id'] in id_list and ret[id_list.index(row['id'])].ok:
                     table.remove(row)
-                    break
 
             self.__table = table
 
