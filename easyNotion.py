@@ -1,5 +1,6 @@
 import copy
 import json
+import logging
 import os.path
 import random
 import re
@@ -16,19 +17,27 @@ CRUD_event.set()  # 置空
 
 
 # CRUD频率限制包裹器
-def crud_wrapper(func, **kwargs) -> requests.models.Response:
-    global CRUD_event
-    while True:
-        CRUD_event.wait()  # Block if the event is cleared.
-        res = func(**kwargs)
-        if res.status_code != 429:
-            break
-        else:
-            CRUD_event.clear()
-            wait_time = int(res.header['Retry-After'])
-            time.sleep(wait_time)
-            CRUD_event.set()
-    return res
+def crud_wrapper(func):
+    def wrapper(self, **kwargs):
+        global CRUD_event
+        had_429 = False
+        while True:
+            CRUD_event.wait()
+            res = func(**kwargs)
+            if res.status_code != 429:
+                return res
+            else:
+                logging.warning('发生频率限制')
+                if isinstance(self.__all_token, list) and not had_429:
+                    self.update_random_useragent_and_token()
+                    had_429 = True
+                else:
+                    CRUD_event.clear()
+                    wait_time = int(res.headers.get('Retry-After', 1))
+                    time.sleep(wait_time)
+                    CRUD_event.set()
+
+    return wrapper
 
 
 # 超时异常包裹
@@ -53,7 +62,7 @@ def timeout(retry_time: int, timeout: int):
                 t.join(timeout)  # 超时时间,单位:秒
                 if not t.is_alive():
                     break
-                print(f'超时重试{i + 1}')
+                logging.warning(f'超时重试{i + 1}')
                 self.update_random_useragent_and_token()  # 更新请求代理
             else:  # 当循环正常结束（没有被break打断）时执行else语句
                 raise TimeoutError("函数超时")
@@ -75,7 +84,7 @@ def retry_decorator(max_retries=3):
                     return func(self, *args, **kwargs)
                 except Exception as e:
                     self.update_random_useragent_and_token()  # 更新请求代理
-                    print(f'发生异常,第{i + 1}次重试,{e}')
+                    logging.warning(f'发生异常,第{i + 1}次重试,{e}')
                     exception = e
             raise exception
 
@@ -254,16 +263,16 @@ class easyNotion:
 
             # 发送请求
             if self.is_page:  # 页面类型
-                res = crud_wrapper(self.__session.request,
-                                   method="GET",
-                                   url=f'{self.__baseUrl}blocks/{self.notion_id}/children?page_size=100',
-                                   headers=self.__headers)
+                res = crud_wrapper(self.__session.request)(self,
+                                                           method="GET",
+                                                           url=f'{self.__baseUrl}blocks/{self.notion_id}/children?page_size=100',
+                                                           headers=self.__headers)
             else:  # 数据库类型
-                res = crud_wrapper(self.__session.request,
-                                   method="POST",
-                                   url=f'{self.__baseUrl}databases/{self.notion_id}/query',
-                                   json=payload,
-                                   headers=self.__headers)
+                res = crud_wrapper(self.__session.request)(self,
+                                                           method="POST",
+                                                           url=f'{self.__baseUrl}databases/{self.notion_id}/query',
+                                                           json=payload,
+                                                           headers=self.__headers)
 
             if not res.ok:
                 raise Exception('An error occurred:网络链接失败' + str(res.text))
@@ -534,11 +543,11 @@ class easyNotion:
             "properties": payload
         }
 
-        res = crud_wrapper(self.__session.request,
-                           method="POST",
-                           url=f'{self.__baseUrl}pages',
-                           headers=self.__headers,
-                           json=payload)
+        res = crud_wrapper(self.__session.request)(self,
+                                                   method="POST",
+                                                   url=f'{self.__baseUrl}pages',
+                                                   headers=self.__headers,
+                                                   json=payload)
 
         # 更新表
         self.__get_table(self.get_original_table())
@@ -589,11 +598,11 @@ class easyNotion:
 
         ret = []
         for id in id_list:
-            temp_ret = crud_wrapper(self.__session.request,
-                                    method='PATCH',
-                                    url=self.__baseUrl + 'pages/' + id,
-                                    headers=self.__headers,
-                                    json=payload)
+            temp_ret = crud_wrapper(self.__session.request)(self,
+                                                            method='PATCH',
+                                                            url=self.__baseUrl + 'pages/' + id,
+                                                            headers=self.__headers,
+                                                            json=payload)
 
             ret.append(temp_ret)
 
@@ -680,10 +689,10 @@ class easyNotion:
 
         ret = []
         for id in id_list:
-            temp_ret = crud_wrapper(self.__session.request,
-                                    method='DELETE',
-                                    url=self.__baseUrl + 'blocks/' + id,
-                                    headers=self.__headers)
+            temp_ret = crud_wrapper(self.__session.request)(self,
+                                                            method='DELETE',
+                                                            url=self.__baseUrl + 'blocks/' + id,
+                                                            headers=self.__headers)
 
             ret.append(temp_ret)
 
