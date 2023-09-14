@@ -6,6 +6,7 @@ import random
 import re
 import threading
 import time
+from pprint import pprint
 from typing import Dict
 
 import requests
@@ -557,24 +558,30 @@ class easyNotion:
     # 插入页面数据
     @retry_decorator()
     @timeout(retry_time=2, timeout=30)
-    def insert_page(self, block: Union[Divider, Mention, LinkPreview, RichText, Block]) -> requests.models.Response:
+    def insert_page(self,
+                    blocks: List[Union[Divider, Mention, LinkPreview, RichText, Block]]) -> requests.models.Response:
         """
         插入页面数据
-        :param block: 富文本块
+        :param blocks: 富文本块列表
         """
+        payload = []
+
+        for block in blocks:
+            temp_payload = {
+                'object': 'block',
+                'type': block.text_type,
+            }
+
+            temp_payload.update(block.get_payload())
+
+            payload.append(temp_payload)
 
         payload = {
-            'object': 'block',
-            'type': block.text_type,
+            'children': payload
         }
-
-        payload.update(block.get_payload())
-
-        payload = {
-            'children': [payload]
-        }
-
-        res = self.__session.patch(self.__baseUrl + 'blocks/' + block.parent_id + '/children', headers=self.__headers,
+        pprint(payload)
+        res = self.__session.patch(self.__baseUrl + 'blocks/' + blocks[0].parent_id + '/children',
+                                   headers=self.__headers,
                                    json=payload)
 
         return res
