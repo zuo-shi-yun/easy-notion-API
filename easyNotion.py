@@ -4,11 +4,31 @@ import os.path
 import random
 import re
 import threading
+import time
 from typing import Dict
 
 import requests
 
 from blocksModel import *
+
+CRUD_event = threading.Event()  # CRUD事件,用于发生频率限制时限制速率
+CRUD_event.set()  # 置空
+
+
+# CRUD频率限制包裹器
+def crud_wrapper(func, **kwargs) -> requests.models.Response:
+    global CRUD_event
+    while True:
+        CRUD_event.wait()  # Block if the event is cleared.
+        res = func(**kwargs)
+        if res.status_code != 429:
+            break
+        else:
+            CRUD_event.clear()
+            wait_time = int(res.header['Retry-After'])
+            time.sleep(wait_time)
+            CRUD_event.set()
+    return res
 
 
 # 超时异常包裹
@@ -234,12 +254,16 @@ class easyNotion:
 
             # 发送请求
             if self.is_page:  # 页面类型
-                res = self.__session.request("GET",
-                                             self.__baseUrl + 'blocks/' + self.notion_id + '/children?page_size=100',
-                                             headers=self.__headers)
+                res = crud_wrapper(self.__session.request,
+                                   method="GET",
+                                   url=f'{self.__baseUrl}blocks/{self.notion_id}/children?page_size=100',
+                                   headers=self.__headers)
             else:  # 数据库类型
-                res = self.__session.request("POST", self.__baseUrl + 'databases/' + self.notion_id + '/query',
-                                             json=payload, headers=self.__headers)
+                res = crud_wrapper(self.__session.request,
+                                   method="POST",
+                                   url=f'{self.__baseUrl}databases/{self.notion_id}/query',
+                                   json=payload,
+                                   headers=self.__headers)
 
             if not res.ok:
                 raise Exception('An error occurred:网络链接失败' + str(res.text))
@@ -481,8 +505,6 @@ class easyNotion:
                 if not re.search(condition[i], row[i]):  # 不符合正则则返回False
                     return False
             else:  # 普通字符串做普通处理
-                row[i] = '\n'.join(row[i].split('\r\n'))
-                condition[i] = '\n'.join(condition[i].split('\r\n'))
                 if row[i] != condition[i]:  # 不相等返回False
                     return False
         else:
@@ -512,7 +534,11 @@ class easyNotion:
             "properties": payload
         }
 
-        res = self.__session.request("POST", self.__baseUrl + 'pages', headers=self.__headers, json=payload)
+        res = crud_wrapper(self.__session.request,
+                           method="POST",
+                           url=f'{self.__baseUrl}pages',
+                           headers=self.__headers,
+                           json=payload)
 
         # 更新表
         self.__get_table(self.get_original_table())
@@ -563,8 +589,12 @@ class easyNotion:
 
         ret = []
         for id in id_list:
-            temp_ret = self.__session.request('PATCH', self.__baseUrl + 'pages/' + id, headers=self.__headers,
-                                              json=payload)
+            temp_ret = crud_wrapper(self.__session.request,
+                                    method='PATCH',
+                                    url=self.__baseUrl + 'pages/' + id,
+                                    headers=self.__headers,
+                                    json=payload)
+
             ret.append(temp_ret)
 
         # 更新表
@@ -650,7 +680,11 @@ class easyNotion:
 
         ret = []
         for id in id_list:
-            temp_ret = self.__session.request("DELETE", self.__baseUrl + 'blocks/' + id, headers=self.__headers)
+            temp_ret = crud_wrapper(self.__session.request,
+                                    method='DELETE',
+                                    url=self.__baseUrl + 'blocks/' + id,
+                                    headers=self.__headers)
+
             ret.append(temp_ret)
 
         # 更新表
