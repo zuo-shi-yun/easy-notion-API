@@ -6,7 +6,6 @@ import random
 import re
 import threading
 import time
-from pprint import pprint
 from typing import Dict
 
 import requests
@@ -241,7 +240,6 @@ class easyNotion:
 
     # 获得原始数据表
     @retry_decorator()
-    @timeout(retry_time=2, timeout=120)
     def get_original_table(self) -> json:
         """
         获得原始数据表\n
@@ -262,19 +260,22 @@ class easyNotion:
             if start_cursor:
                 payload["start_cursor"] = start_cursor
 
-            # 发送请求
-            if self.is_page:  # 页面类型
-                res = crud_wrapper(self.__session.request)(self,
-                                                           method="GET",
-                                                           url=f'{self.__baseUrl}blocks/{self.notion_id}/children?page_size=100',
-                                                           headers=self.__headers)
-            else:  # 数据库类型
-                res = crud_wrapper(self.__session.request)(self,
-                                                           method="POST",
-                                                           url=f'{self.__baseUrl}databases/{self.notion_id}/query',
-                                                           json=payload,
-                                                           headers=self.__headers)
+            @timeout(retry_time=2, timeout=10)
+            def send_requests(self):
+                # 发送请求
+                if self.is_page:  # 页面类型
+                    return crud_wrapper(self.__session.request)(self,
+                                                                method="GET",
+                                                                url=f'{self.__baseUrl}blocks/{self.notion_id}/children?page_size=100',
+                                                                headers=self.__headers)
+                else:  # 数据库类型
+                    return crud_wrapper(self.__session.request)(self,
+                                                                method="POST",
+                                                                url=f'{self.__baseUrl}databases/{self.notion_id}/query',
+                                                                json=payload,
+                                                                headers=self.__headers)
 
+            res = send_requests(self)
             if not res.ok:
                 raise Exception('An error occurred:网络链接失败' + str(res.text))
 
@@ -521,6 +522,7 @@ class easyNotion:
             return True
 
     @retry_decorator()
+    @timeout(retry_time=2, timeout=10)
     def insert(self, data: Dict[str, str]) -> requests.models.Response:
         """
         插入数据\n
@@ -579,7 +581,7 @@ class easyNotion:
         payload = {
             'children': payload
         }
-        pprint(payload)
+
         res = self.__session.patch(self.__baseUrl + 'blocks/' + blocks[0].parent_id + '/children',
                                    headers=self.__headers,
                                    json=payload)
@@ -588,6 +590,7 @@ class easyNotion:
 
     # 根据col更新某一行的数据
     @retry_decorator()
+    @timeout(retry_time=2, timeout=10)
     def update(self, update_data: Dict[str, str],
                update_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]:
         """
@@ -686,6 +689,7 @@ class easyNotion:
 
     # 根据col字段删除行
     @retry_decorator()
+    @timeout(retry_time=2, timeout=10)
     def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]:
         """
         根据col列的content内容\n
