@@ -24,7 +24,7 @@ def crud_wrapper(func):
         while True:
             CRUD_event.wait()
             res = func(**kwargs)
-            if res.status_code != 429:
+            if isinstance(res, requests.models.Response) and res.status_code != 429:
                 return res
             else:
                 logging.warning('发生频率限制')
@@ -546,11 +546,13 @@ class easyNotion:
             "properties": payload
         }
 
-        res = crud_wrapper(self.__session.request)(self,
-                                                   method="POST",
-                                                   url=f'{self.__baseUrl}pages',
-                                                   headers=self.__headers,
-                                                   json=payload)
+        res = None
+        while not isinstance(res, requests.models.Response):
+            res = crud_wrapper(self.__session.request)(self,
+                                                       method="POST",
+                                                       url=f'{self.__baseUrl}pages',
+                                                       headers=self.__headers,
+                                                       json=payload)
 
         if res.ok:
             # 更新表
@@ -562,7 +564,7 @@ class easyNotion:
 
     # 插入页面数据
     @retry_decorator()
-    @timeout(retry_time=2, timeout=30)
+    @timeout(retry_time=2, timeout=10)
     def insert_page(self,
                     blocks: List[Union[Divider, Mention, LinkPreview, RichText, Block]]) -> requests.models.Response:
         """
@@ -610,15 +612,17 @@ class easyNotion:
 
         ret = []
         for id in id_list:
-            @timeout(retry_time=2, timeout=10)
-            def send_request(self):
-                return crud_wrapper(self.__session.request)(self,
-                                                            method='PATCH',
-                                                            url=self.__baseUrl + 'pages/' + id,
-                                                            headers=self.__headers,
-                                                            json=payload)
+            temp_ret = None
+            while not isinstance(temp_ret, requests.models.Response):
+                @timeout(retry_time=2, timeout=10)
+                def send_request(self):
+                    return crud_wrapper(self.__session.request)(self,
+                                                                method='PATCH',
+                                                                url=self.__baseUrl + 'pages/' + id,
+                                                                headers=self.__headers,
+                                                                json=payload)
 
-            temp_ret = send_request(self)
+                temp_ret = send_request(self)
 
             ret.append(temp_ret)
 
@@ -635,7 +639,7 @@ class easyNotion:
         return ret
 
     # 更新页面中的块
-    @timeout(retry_time=2, timeout=30)
+    @timeout(retry_time=2, timeout=10)
     def update_page(self, block: Union[Divider, Mention, LinkPreview, RichText]):
 
         return self.__session.patch(self.__baseUrl + 'blocks/' + block.id, headers=self.__headers,
@@ -643,7 +647,7 @@ class easyNotion:
         # 删除页面中的块
 
     @retry_decorator()
-    @timeout(retry_time=2, timeout=30)
+    @timeout(retry_time=2, timeout=10)
     def delete_page(self, id: str):
         return self.__session.delete(self.__baseUrl + 'blocks/' + id, headers=self.__headers)
 
@@ -705,14 +709,16 @@ class easyNotion:
 
         ret = []
         for id in id_list:
-            @timeout(retry_time=2, timeout=10)
-            def send_request(self):
-                return crud_wrapper(self.__session.request)(self,
-                                                            method='DELETE',
-                                                            url=self.__baseUrl + 'blocks/' + id,
-                                                            headers=self.__headers)
+            temp_ret = None
+            while not isinstance(temp_ret, requests.models.Response):
+                @timeout(retry_time=2, timeout=10)
+                def send_request(self):
+                    return crud_wrapper(self.__session.request)(self,
+                                                                method='DELETE',
+                                                                url=self.__baseUrl + 'blocks/' + id,
+                                                                headers=self.__headers)
 
-            temp_ret = send_request(self)
+                temp_ret = send_request(self)
 
             ret.append(temp_ret)
 
