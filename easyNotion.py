@@ -552,8 +552,11 @@ class easyNotion:
                                                    headers=self.__headers,
                                                    json=payload)
 
-        # 更新表
-        self.__get_table(self.get_original_table())
+        if res.ok:
+            # 更新表
+            insert_data = (json.loads(res.text))
+            insert_data = {'results': [insert_data]}
+            self.__get_table(insert_data)
 
         return res
 
@@ -590,7 +593,6 @@ class easyNotion:
 
     # 根据col更新某一行的数据
     @retry_decorator()
-    @timeout(retry_time=2, timeout=10)
     def update(self, update_data: Dict[str, str],
                update_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]:
         """
@@ -608,11 +610,15 @@ class easyNotion:
 
         ret = []
         for id in id_list:
-            temp_ret = crud_wrapper(self.__session.request)(self,
+            @timeout(retry_time=2, timeout=10)
+            def send_request(self):
+                return crud_wrapper(self.__session.request)(self,
                                                             method='PATCH',
                                                             url=self.__baseUrl + 'pages/' + id,
                                                             headers=self.__headers,
                                                             json=payload)
+
+            temp_ret = send_request(self)
 
             ret.append(temp_ret)
 
@@ -689,7 +695,6 @@ class easyNotion:
 
     # 根据col字段删除行
     @retry_decorator()
-    @timeout(retry_time=2, timeout=10)
     def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]:
         """
         根据col列的content内容\n
@@ -700,10 +705,14 @@ class easyNotion:
 
         ret = []
         for id in id_list:
-            temp_ret = crud_wrapper(self.__session.request)(self,
+            @timeout(retry_time=2, timeout=10)
+            def send_request(self):
+                return crud_wrapper(self.__session.request)(self,
                                                             method='DELETE',
                                                             url=self.__baseUrl + 'blocks/' + id,
                                                             headers=self.__headers)
+
+            temp_ret = send_request(self)
 
             ret.append(temp_ret)
 
