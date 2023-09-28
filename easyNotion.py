@@ -662,7 +662,7 @@ class easyNotion:
     def delete_page(self, id: str, timeout=10):
         @timeout_decorator(retry_time=2, timeout=timeout)
         def send_request(self):
-            return self.__session.delete(self.__baseUrl + 'blocks/' + id)
+            return self.__session.delete(self.__baseUrl + 'blocks/' + id, headers=self.__headers)
 
         return send_request(self)
 
