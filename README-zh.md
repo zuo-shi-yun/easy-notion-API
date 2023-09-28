@@ -47,11 +47,10 @@ data = {"title": "test_title", "column_name1": "value1", "column_name2": "value2
 res = db.insert(data=data)
 
 # 更新数据
-res = db.update(col="column_name", content="column_content", update_col="update_column_name",
-                update_content="new_value", isTitle=False)
+res = db.update(,
 
 # 删除数据
-res = db.delete(col="column_name", content="column_content")
+res = db.delete()
 
 # 关闭session
 db.closeSession()

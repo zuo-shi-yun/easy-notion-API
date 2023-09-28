@@ -17,7 +17,7 @@ CRUD_event.set()  # 置空
 
 
 # CRUD频率限制包裹器
-def crud_wrapper(func):
+def crud_decorator(func):
     def wrapper(self, **kwargs):
         global CRUD_event
         had_429 = False
@@ -41,7 +41,7 @@ def crud_wrapper(func):
 
 
 # 超时异常包裹
-def timeout(retry_time: int, timeout: int):
+def timeout_decorator(retry_time: int, timeout: int):
     """
     超时包裹器
     :param retry_time: 超时重试次数
@@ -240,9 +240,10 @@ class easyNotion:
 
     # 获得原始数据表
     @retry_decorator()
-    def get_original_table(self) -> json:
+    def get_original_table(self, timeout=10) -> json:
         """
         获得原始数据表\n
+        :param timeout:
         :return: 获得数据库中的全部的未处理数据,若成功返回json对象,结果按照no列递增排序,失败则返回错误代码\n
         """
         payload = {'sorts': []}
@@ -260,20 +261,20 @@ class easyNotion:
             if start_cursor:
                 payload["start_cursor"] = start_cursor
 
-            @timeout(retry_time=2, timeout=10)
+            @timeout_decorator(retry_time=2, timeout=timeout)
             def send_requests(self):
                 # 发送请求
                 if self.is_page:  # 页面类型
-                    return crud_wrapper(self.__session.request)(self,
-                                                                method="GET",
-                                                                url=f'{self.__baseUrl}blocks/{self.notion_id}/children?page_size=100',
-                                                                headers=self.__headers)
+                    return crud_decorator(self.__session.request)(self,
+                                                                  method="GET",
+                                                                  url=f'{self.__baseUrl}blocks/{self.notion_id}/children?page_size=100',
+                                                                  headers=self.__headers)
                 else:  # 数据库类型
-                    return crud_wrapper(self.__session.request)(self,
-                                                                method="POST",
-                                                                url=f'{self.__baseUrl}databases/{self.notion_id}/query',
-                                                                json=payload,
-                                                                headers=self.__headers)
+                    return crud_decorator(self.__session.request)(self,
+                                                                  method="POST",
+                                                                  url=f'{self.__baseUrl}databases/{self.notion_id}/query',
+                                                                  json=payload,
+                                                                  headers=self.__headers)
 
             res = send_requests(self)
             if not res.ok:
@@ -295,9 +296,10 @@ class easyNotion:
         return original_table
 
     # 获得处理后的数据表,避免重复查询
-    def get_table(self) -> List[Dict[str, str]]:
+    def get_table(self, timeout=10) -> List[Dict[str, str]]:
         """
         获得处理后的数据表\n
+        :param timeout:查询每一页的最长时间，默认10秒
         :return: 处理后的数据表
         """
         # 已经有表则直接返回
@@ -307,7 +309,7 @@ class easyNotion:
         # 没有表则查询
         base_table = {}
         while type(base_table) is not dict or 'results' not in base_table:  # 避免查询错误
-            base_table = self.get_original_table()  # 未处理的表
+            base_table = self.get_original_table(timeout)  # 未处理的表
 
         self.__get_table(base_table)
 
@@ -476,14 +478,15 @@ class easyNotion:
     # 判断是否符合条件
 
     # 通用查询
-    def query(self, query_col: List[str], query_condition: Dict[str, Union[str, re.Pattern]] = '') -> list:
+    def query(self, query_col: List[str], query_condition: Dict[str, Union[str, re.Pattern]] = '', timeout=10) -> list:
         """
         根据query_condition条件对数据表的query_col列进行查询\n
         :param query_col:要查询的列名,为空列表时查询所有的列\n
         :param query_condition:查询条件,{'列名':'列值'},默认查询全部行\n
+        :param timeout:查询每一页的最长时间,默认10秒
         :return:满足条件的行(当只查询一列时返回一个列表,多列时返回字典列表),查询行数,列表中元素的类型(没有结果时为None)
         """
-        table = self.get_table()
+        table = self.get_table(timeout)
         ret = []
 
         # 遍历表
@@ -522,11 +525,11 @@ class easyNotion:
             return True
 
     @retry_decorator()
-    @timeout(retry_time=2, timeout=10)
-    def insert(self, data: Dict[str, str]) -> requests.models.Response:
+    def insert(self, data: Dict[str, str], timeout=10) -> requests.models.Response:
         """
         插入数据\n
         :param data:所要插入的数据,{列名1:值1,列名2:值2}\n
+        :param timeout: 超时时间,默认10秒
         """
 
         col_names = self.get_col_name()
@@ -546,13 +549,18 @@ class easyNotion:
             "properties": payload
         }
 
-        res = None
-        while not isinstance(res, requests.models.Response):
-            res = crud_wrapper(self.__session.request)(self,
-                                                       method="POST",
-                                                       url=f'{self.__baseUrl}pages',
-                                                       headers=self.__headers,
-                                                       json=payload)
+        @timeout_decorator(retry_time=2, timeout=timeout)
+        def send_request(self):
+            ret = None
+            while not isinstance(ret, requests.models.Response):
+                ret = crud_decorator(self.__session.request)(self,
+                                                             method="POST",
+                                                             url=f'{self.__baseUrl}pages',
+                                                             headers=self.__headers,
+                                                             json=payload)
+            return ret
+
+        res = send_request(self)
 
         if res.ok:
             # 更新表
@@ -564,11 +572,11 @@ class easyNotion:
 
     # 插入页面数据
     @retry_decorator()
-    @timeout(retry_time=2, timeout=10)
-    def insert_page(self,
-                    blocks: List[Union[Divider, Mention, LinkPreview, RichText, Block]]) -> requests.models.Response:
+    def insert_page(self, blocks: List[Union[Divider, Mention, LinkPreview, RichText, Block]],
+                    timeout=10) -> requests.models.Response:
         """
         插入页面数据
+        :param timeout:超时时间，默认10秒
         :param blocks: 富文本块列表
         """
         payload = []
@@ -587,21 +595,24 @@ class easyNotion:
             'children': payload
         }
 
-        res = self.__session.patch(self.__baseUrl + 'blocks/' + blocks[0].parent_id + '/children',
-                                   headers=self.__headers,
-                                   json=payload)
+        @timeout_decorator(retry_time=2, timeout=timeout)
+        def send_request(self):
+            return self.__session.patch(self.__baseUrl + 'blocks/' + blocks[0].parent_id + '/children',
+                                        headers=self.__headers,
+                                        json=payload)
 
-        return res
+        return send_request(self)
 
     # 根据col更新某一行的数据
     @retry_decorator()
-    def update(self, update_data: Dict[str, str],
-               update_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]:
+    def update(self, update_data: Dict[str, str], update_condition: Dict[str, Union[str, re.Pattern]], timeout=10) -> \
+            List[requests.models.Response]:
         """
-        根据col列的content内容找到行,将行的update_col列更新为update_content,更新列的类型只能为文本\n
+        将满足update_condition条件的行更新为update_data\n
         :param update_condition: 更新条件,{'列名':'列值'}\n
         :param update_data: 更新的数据\n
-        :return:成功返回成功,失败返回错误代码
+        :param timeout:更新每一行的超时时间，默认10秒
+        :return:符合条件的每一行请求对象
         """
         payload = {"properties": {}}
         # 获得更新payload
@@ -614,13 +625,13 @@ class easyNotion:
         for id in id_list:
             temp_ret = None
             while not isinstance(temp_ret, requests.models.Response):
-                @timeout(retry_time=2, timeout=10)
+                @timeout_decorator(retry_time=2, timeout=timeout)
                 def send_request(self):
-                    return crud_wrapper(self.__session.request)(self,
-                                                                method='PATCH',
-                                                                url=self.__baseUrl + 'pages/' + id,
-                                                                headers=self.__headers,
-                                                                json=payload)
+                    return crud_decorator(self.__session.request)(self,
+                                                                  method='PATCH',
+                                                                  url=self.__baseUrl + 'pages/' + id,
+                                                                  headers=self.__headers,
+                                                                  json=payload)
 
                 temp_ret = send_request(self)
 
@@ -639,17 +650,21 @@ class easyNotion:
         return ret
 
     # 更新页面中的块
-    @timeout(retry_time=2, timeout=10)
-    def update_page(self, block: Union[Divider, Mention, LinkPreview, RichText]):
+    def update_page(self, block: Union[Divider, Mention, LinkPreview, RichText], timeout=10):
+        @timeout_decorator(retry_time=2, timeout=timeout)
+        def send_request(self):
+            return self.__session.patch(self.__baseUrl + 'blocks/' + block.id, headers=self.__headers,
+                                        json=block.get_payload())
 
-        return self.__session.patch(self.__baseUrl + 'blocks/' + block.id, headers=self.__headers,
-                                    json=block.get_payload())
-        # 删除页面中的块
+        return send_request(self)
 
     @retry_decorator()
-    @timeout(retry_time=2, timeout=10)
-    def delete_page(self, id: str):
-        return self.__session.delete(self.__baseUrl + 'blocks/' + id, headers=self.__headers)
+    def delete_page(self, id: str, timeout=10):
+        @timeout_decorator(retry_time=2, timeout=timeout)
+        def send_request(self):
+            return self.__session.delete(self.__baseUrl + 'blocks/' + id)
+
+        return send_request(self)
 
     # 得到各种类型数据的用于更新、插入数据的payload
     def __get_payload(self, col_name: str, content: str) -> Dict[str, dict]:
@@ -699,10 +714,11 @@ class easyNotion:
 
     # 根据col字段删除行
     @retry_decorator()
-    def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]:
+    def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]], timeout=10) -> List[requests.models.Response]:
         """
-        根据col列的content内容\n
+        删除满足delete_condition条件的行\n
         :param delete_condition: 删除条件,{'列名':'列值'}\n
+        :param timeout:删除每一行的超时时间，默认10秒
         :return:返回响应对象
         """
         id_list = self.query(['id'], delete_condition)
@@ -711,12 +727,12 @@ class easyNotion:
         for id in id_list:
             temp_ret = None
             while not isinstance(temp_ret, requests.models.Response):
-                @timeout(retry_time=2, timeout=10)
+                @timeout_decorator(retry_time=2, timeout=timeout)
                 def send_request(self):
-                    return crud_wrapper(self.__session.request)(self,
-                                                                method='DELETE',
-                                                                url=self.__baseUrl + 'blocks/' + id,
-                                                                headers=self.__headers)
+                    return crud_decorator(self.__session.request)(self,
+                                                                  method='DELETE',
+                                                                  url=self.__baseUrl + 'blocks/' + id,
+                                                                  headers=self.__headers)
 
                 temp_ret = send_request(self)
 
@@ -730,6 +746,36 @@ class easyNotion:
                     table.remove(row)
 
             self.__table = table
+
+        return ret
+
+    # 追加内容
+    def append(self, append_data: Dict[str, str], append_condition: Dict[str, Union[str, re.Pattern]], timeout=10) -> \
+            List[requests.models.Response]:
+        """
+        向满足append_condition条件的行追加append_data内容
+        :param append_data:追加内容
+        :param append_condition:追加条件
+        :param timeout:追加每一行内容的超时时间，默认10秒
+        :return:响应对象列表
+        """
+        query_col = list(append_data.keys())  # 获得更新的列
+        query_col.append('id')  # 同时查询id
+
+        src_contents = self.query(query_col, append_condition)  # 获得原始内容
+        new_contents = []
+        for src_content in src_contents:  # 遍历满足追加条件的行
+            temp = {}
+            for data in append_data:  # 遍历追加内容
+                temp[data] = src_content[data] + str(append_data[data])  # 新行=旧行+追加内容
+            temp['id'] = src_content['id']
+            new_contents.append(temp)
+
+        ret = []
+        for new_content in new_contents:  # 遍历新行
+            update_content = {k: v for k, v in new_content.items() if k != 'id'}  # 获得不包含id的更新内容
+            ret.extend(
+                self.update(update_content, {'id': new_content['id']}, timeout=timeout))  # 更新行
 
         return ret
 
