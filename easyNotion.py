@@ -82,11 +82,19 @@ class easyNotion:
             exception = '重试原因:' + str(exception) if exception else exception
             logging.warning(f'第{retry_statue.attempt_number}次重试.{exception}')  # 输出次数以及异常
 
+        # 重试结束前行为
+        def retry_error(retry_statue):
+            if retry_statue.outcome.exception():
+                raise retry_statue.outcome.exception()
+            else:
+                raise Exception(f'达到重试上限!{retry_statue.outcome.result()}')
+
         @retry(stop=stop_after_attempt(self.retry_time) | stop_after_delay(self.timeout * self.retry_time),
                # 达到重试次数或超出时间限制停止重试
                wait=wait_fixed(1),  # 每次重试间隔1秒
                retry=retry_if_result(is_failure) | retry_if_exception_type(),  # 若失败则重试
-               before_sleep=before_retry)  # 重试前行为
+               before_sleep=before_retry,  # 重试前行为
+               retry_error_callback=retry_error)  # 结束重试前行为
         def send_request(**kwargs):
             return self.__session.request(**kwargs, timeout=self.timeout)
 
