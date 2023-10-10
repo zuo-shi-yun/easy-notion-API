@@ -298,7 +298,8 @@ class easyNotion:
     # 判断是否符合条件
 
     # 通用查询
-    def query(self, query_col: List[str], query_condition: Dict[str, Union[str, re.Pattern]] = '') -> list:
+    def query(self, query_col: List[str], query_condition: Dict[str, Union[str, re.Pattern]] = '') -> List[
+        Union[str, Dict[str, str]]]:
         """
         根据query_condition条件对数据表的query_col列进行查询\n
         :param query_col:要查询的列名,为空列表时查询所有的列\n
@@ -343,6 +344,26 @@ class easyNotion:
         else:
             return True
 
+    # 获得数据库基本信息
+    def __get_database_info(self) -> None:
+        """
+        获得数据库基本信息——用于当数据库为空时获得基本信息\n
+        :return: None
+        """
+        res = self.__session.get(self.__baseUrl + 'databases/' + self.notion_id, headers=self.__headers)
+
+        table_info = json.loads(res.text)
+
+        for col in table_info['properties']:
+            if table_info['properties'][col]['type'] == 'title':
+                self.__col_name[col] = 'title'
+            elif table_info['properties'][col]['type'] == 'rich_text':
+                self.__col_name[col] = 'text'
+            elif table_info['properties'][col]['type'] == 'unique_id':
+                self.__col_name[col] = 'unique_id'
+            elif table_info['properties'][col]['type'] == 'url':
+                self.__col_name = 'url'
+
     # 插入数据
     def insert(self, data: Dict[str, str]) -> requests.models.Response:
         """
@@ -352,6 +373,10 @@ class easyNotion:
 
         col_names = self.get_col_name()
         payload = {}
+
+        if len(col_names) == 0:
+            self.__get_database_info()
+            col_names = self.get_col_name()
 
         # 遍历全部列
         for col_name in col_names:
