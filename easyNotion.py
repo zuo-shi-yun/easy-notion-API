@@ -18,19 +18,19 @@ class easyNotion:
                  retry_time=3, timeout=15, get_all=True, is_page: bool = False, need_recursion: bool = False,
                  need_download: bool = False, download_path: str = '', trust_env: bool = False):
         """
-        获得notion服务\n
-        :param notion_id: 数据库/页面ID\n
-        :param token: 集成令牌\n
-        :param sort_key: 排序的列,支持根据多列排序\n
-        :param reverse: 默认升序,为True时降序\n
-        :param retry_time: 重试次数,默认3次\n
-        :param timeout:超时时间,默认10s\n
-        :param get_all: 是否获取所有数据，默认获取\n
-        :param is_page: 是否为页面，默认为否\n
-        :param need_recursion: 是否需要递归获得页面的数据,默认不需要\n
-        :param need_download: 是否需要下载到本地,默认不需要\n
-        :param download_path: 若有文件保存到哪个目录中\n
-        :param trust_env: 是否关闭代理,默认关闭\n
+        获得notion服务
+        :param notion_id: 数据库/页面ID
+        :param token: 集成令牌
+        :param sort_key: 排序的列,支持根据多列排序
+        :param reverse: 默认升序,为True时降序
+        :param retry_time: 重试次数,默认3次
+        :param timeout:超时时间,默认10s
+        :param get_all: 是否获取所有数据，默认获取
+        :param is_page: 是否为页面，默认为否
+        :param need_recursion: 是否需要递归获得页面的数据,默认不需要
+        :param need_download: 是否需要下载到本地,默认不需要
+        :param download_path: 若有文件保存到哪个目录中
+        :param trust_env: 是否关闭代理,默认关闭
         """
         # 数据库/页面配置
         self.notion_id = notion_id  # 数据库或页面ID
@@ -103,8 +103,8 @@ class easyNotion:
     # 获得原始数据表
     def get_original_table(self) -> json:
         """
-        获得原始数据表\n
-        :return: 获得数据库中的全部的未处理数据,若成功返回json对象,结果按照no列递增排序,失败则返回错误代码\n
+        获得原始数据表
+        :return: 获得数据库中的全部的未处理数据,若成功返回json对象,结果按照no列递增排序,失败则返回错误代码
         """
         payload = {'sorts': []}
 
@@ -150,7 +150,7 @@ class easyNotion:
     # 获得处理后的数据表,避免重复查询
     def get_table(self) -> List[Dict[str, str]]:
         """
-        获得处理后的数据表\n
+        获得处理后的数据表
         :return: 处理后的数据表
         """
         # 已经有表则直接返回
@@ -164,13 +164,18 @@ class easyNotion:
 
         self.__get_table(base_table)
 
-        return copy.deepcopy(self.__table)
+        temp_table = copy.deepcopy(self.__table)  # 深拷贝
+
+        for row in temp_table:
+            del row['id']  # 删除id列
+
+        return temp_table
 
     # 根据原始表获得处理后的表
     def __get_table(self, base_table: json) -> bool:
         """
-        处理数据表并返回处理后的表\n
-        :param base_table: 原始数据表\n
+        处理数据表并返回处理后的表
+        :param base_table: 原始数据表
         :return: 成功返回True
         """
         # 从原始表中获得数据
@@ -253,8 +258,8 @@ class easyNotion:
     # 获得数据库中的数据列表
     def __get_database_data(self, base_table: json) -> List[Dict[str, str]]:
         """
-        获得数据库中的所有记录\n
-        :param base_table: 原始数据表\n
+        获得数据库中的所有记录
+        :param base_table: 原始数据表
         :return:处理后的数据
         """
         table = []
@@ -308,7 +313,7 @@ class easyNotion:
     # 获得列名称列表
     def get_col_name(self) -> Dict[str, str]:
         """
-        获得列名称:列类型列表\n
+        获得列名称:列类型列表
         :return: 列名称字典,{'text':['文本类型的列名'],'ID':'ID类型的列明','title':'title类型的列名'}
         """
         # 已经有列名:列类型则直接返回
@@ -322,9 +327,9 @@ class easyNotion:
     def query(self, query_col: List[str], query_condition: Dict[str, Union[str, re.Pattern]] = '') -> List[
         Union[str, Dict[str, str]]]:
         """
-        根据query_condition条件对数据表的query_col列进行查询\n
-        :param query_col:要查询的列名,为空列表时查询所有的列\n
-        :param query_condition:查询条件,{'列名':'列值'},默认查询全部行\n
+        根据query_condition条件对数据表的query_col列进行查询
+        :param query_col:要查询的列名,为空列表时查询所有的列
+        :param query_condition:查询条件,{'列名':'列值'},默认查询全部行
         :return:满足条件的行(当只查询一列时返回一个列表,多列时返回字典列表),查询行数,列表中元素的类型(没有结果时为None)
         """
         table = self.get_table()
@@ -349,7 +354,7 @@ class easyNotion:
     @staticmethod
     def __is_match_condition(row: Dict[str, str], condition: Dict[str, Union[str, re.Pattern]]) -> bool:
         """
-        判断row是否符合条件condition,condition为正则表达式\n
+        判断row是否符合条件condition,condition为正则表达式
         :param row: 行Dict格式
         :param condition: 条件,Dict格式,支持正则
         :return: 符合条件返回True，否则返回False
@@ -368,7 +373,7 @@ class easyNotion:
     # 获得数据库基本信息
     def __get_database_info(self) -> None:
         """
-        获得数据库基本信息——用于当数据库为空时获得基本信息\n
+        获得数据库基本信息——用于当数据库为空时获得基本信息
         :return: None
         """
         res = self.__send_request(method='GET',
@@ -390,8 +395,8 @@ class easyNotion:
     # 插入数据
     def insert(self, data: Dict[str, str]) -> requests.models.Response:
         """
-        插入数据\n
-        :param data:所要插入的数据,{列名1:值1,列名2:值2}\n
+        插入数据
+        :param data:所要插入的数据,{列名1:值1,列名2:值2}
         """
 
         col_names = self.get_col_name()
@@ -462,9 +467,9 @@ class easyNotion:
     def update(self, update_data: Dict[str, str], update_condition: Dict[str, Union[str, re.Pattern]]) -> \
             List[requests.models.Response]:
         """
-        将满足update_condition条件的行更新为update_data\n
-        :param update_condition: 更新条件,{'列名':'列值'}\n
-        :param update_data: 更新的数据\n
+        将满足update_condition条件的行更新为update_data
+        :param update_condition: 更新条件,{'列名':'列值'}
+        :param update_data: 更新的数据
         :return:符合条件的每一行请求对象
         """
         payload = {"properties": {}}
@@ -512,10 +517,10 @@ class easyNotion:
     # 得到各种类型数据的用于更新、插入数据的payload
     def __get_payload(self, col_name: str, content: str) -> Dict[str, dict]:
         """
-        得到各种类型的用于更新、插入数据的payload\n
-        :param col_name:列名称\n
-        :param content:要插入或更新的内容\n
-        :return:一个包含用于更新、插入的payload的Dict\n
+        得到各种类型的用于更新、插入数据的payload
+        :param col_name:列名称
+        :param content:要插入或更新的内容
+        :return:一个包含用于更新、插入的payload的Dict
         """
         col_names = self.get_col_name()
 
@@ -558,8 +563,8 @@ class easyNotion:
     # 删除行
     def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]:
         """
-        删除满足delete_condition条件的行\n
-        :param delete_condition: 删除条件,{'列名':'列值'}\n
+        删除满足delete_condition条件的行
+        :param delete_condition: 删除条件,{'列名':'列值'}
         :return:返回响应对象
         """
         id_list = self.query(['id'], delete_condition)
@@ -585,12 +590,13 @@ class easyNotion:
         return ret
 
     # 追加内容
-    def append(self, append_data: Dict[str, str], append_condition: Dict[str, Union[str, re.Pattern]]) -> \
+    def append(self, append_data: Dict[str, str], append_condition: Dict[str, Union[str, re.Pattern]], divide='') -> \
             List[requests.models.Response]:
         """
         向满足append_condition条件的行追加append_data内容
         :param append_data:追加内容
         :param append_condition:追加条件
+        :param divide:分隔符,默认为空
         :return:响应对象列表
         """
         query_col = list(append_data.keys())  # 获得更新的列
@@ -601,7 +607,7 @@ class easyNotion:
         for src_content in src_contents:  # 遍历满足追加条件的行
             temp = {}
             for data in append_data:  # 遍历追加内容
-                temp[data] = src_content[data] + str(append_data[data])  # 新行=旧行+追加内容
+                temp[data] = src_content[data] + divide + str(append_data[data])  # 新行=旧行+追加内容
             temp['id'] = src_content['id']
             new_contents.append(temp)
 
