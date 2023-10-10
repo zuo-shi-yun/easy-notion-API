@@ -7,14 +7,15 @@ import re
 from typing import Dict
 
 import requests
-from requests.adapters import HTTPAdapter, Retry
+import tenacity
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_result, retry_if_exception_type, stop_after_delay
 
 from blocksModel import *
 
 
 class easyNotion:
     def __init__(self, notion_id: str, token: Union[str, List[str]], sort_key: List[str] = '', reverse: List[bool] = '',
-                 retry_time=3, timeout=10, get_all=True, is_page: bool = False, need_recursion: bool = False,
+                 retry_time=3, timeout=15, get_all=True, is_page: bool = False, need_recursion: bool = False,
                  need_download: bool = False, download_path: str = '', trust_env: bool = False):
         """
         获得notion服务\n
@@ -37,7 +38,7 @@ class easyNotion:
         self.__token = ''  # 当前使用token
         self.__sort_key = sort_key  # 排序键
         self.__reverse = reverse if reverse else [False] * len(sort_key)  # 是否逆序
-        self.__retry_time = retry_time  # 重试次数
+        self.retry_time = retry_time  # 重试次数
         self.timeout = timeout  # 超时时间
         self.get_all = get_all  # 是否获得数据库中全部数据
         self.is_page = is_page  # 是否是页面
@@ -49,7 +50,6 @@ class easyNotion:
         # 网络相关配置
         self.__session = requests.Session()  # session
         self.__session.trust_env = trust_env  # 初始化本地环境
-        self.__update_session_mount()  # 添加挂载/重试次数
         self.__headers = {
             'Accept': 'application/json',
             'Notion-Version': '2022-06-28',
@@ -63,6 +63,34 @@ class easyNotion:
         # 数据库对象信息
         self.__table = []  # 数据表
         self.__col_name = {}  # 列类型
+
+    # 使用包裹器发送请求
+    def __send_request(self, **kwargs):
+        # 检查返回值,错误则返回真
+        def is_failure(result: requests.models.Response):
+            if result.status_code in [400, 401, 403, 404, 409, 429, 500, 502, 503, 504]:
+                logging.warning(f'请求错误.{result.text}')
+                return True
+            else:
+                return False
+
+        # 重试前行为
+        def before_retry(retry_statue: tenacity.RetryCallState):
+            self.update_random_useragent_and_token()  # 更新token
+            # 检查是否有异常
+            exception = retry_statue.outcome.exception() if retry_statue.outcome.exception() else ''
+            exception = '重试原因:' + str(exception) if exception else exception
+            logging.warning(f'第{retry_statue.attempt_number}次重试.{exception}')  # 输出次数以及异常
+
+        @retry(stop=stop_after_attempt(self.retry_time) | stop_after_delay(self.timeout * self.retry_time),
+               # 达到重试次数或超出时间限制停止重试
+               wait=wait_fixed(1),  # 每次重试间隔1秒
+               retry=retry_if_result(is_failure) | retry_if_exception_type(),  # 若失败则重试
+               before_sleep=before_retry)  # 重试前行为
+        def send_request(**kwargs):
+            return self.__session.request(**kwargs, timeout=self.timeout)
+
+        return send_request(**kwargs)
 
     # 获得原始数据表
     def get_original_table(self) -> json:
@@ -87,19 +115,14 @@ class easyNotion:
 
             # 发送请求
             if self.is_page:  # 页面类型
-                res = self.__session.request(method="GET",
-                                             url=f'{self.__baseUrl}blocks/{self.notion_id}/children?page_size=100',
-                                             headers=self.__headers,
-                                             timeout=self.timeout)
+                res = self.__send_request(method="GET",
+                                          url=f'{self.__baseUrl}blocks/{self.notion_id}/children?page_size=100',
+                                          headers=self.__headers)
             else:  # 数据库类型
-                res = self.__session.request(method="POST",
-                                             url=f'{self.__baseUrl}databases/{self.notion_id}/query',
-                                             json=payload,
-                                             headers=self.__headers,
-                                             timeout=self.timeout)
-
-            if not res.ok:
-                raise Exception('网络链接失败' + str(res.text))
+                res = self.__send_request(method="POST",
+                                          url=f'{self.__baseUrl}databases/{self.notion_id}/query',
+                                          json=payload,
+                                          headers=self.__headers)
 
             data = res.json()  # 转为dict格式
             # 判断原始表是为为空，不为空则追加
@@ -287,16 +310,6 @@ class easyNotion:
         self.get_table()
         return copy.deepcopy(self.__col_name)
 
-    # 获取总行数
-    def get_row_cnt(self) -> int:
-        """
-        根据数据表判断总行数\n
-        :return:返回总行数
-        """
-        return len(self.get_table())
-
-    # 判断是否符合条件
-
     # 通用查询
     def query(self, query_col: List[str], query_condition: Dict[str, Union[str, re.Pattern]] = '') -> List[
         Union[str, Dict[str, str]]]:
@@ -350,7 +363,9 @@ class easyNotion:
         获得数据库基本信息——用于当数据库为空时获得基本信息\n
         :return: None
         """
-        res = self.__session.get(self.__baseUrl + 'databases/' + self.notion_id, headers=self.__headers)
+        res = self.__send_request(method='GET',
+                                  url=self.__baseUrl + 'databases/' + self.notion_id,
+                                  headers=self.__headers)
 
         table_info = json.loads(res.text)
 
@@ -394,11 +409,10 @@ class easyNotion:
 
         res = None
         while not isinstance(res, requests.models.Response):
-            res = self.__session.request(method="POST",
-                                         url=f'{self.__baseUrl}pages',
-                                         headers=self.__headers,
-                                         json=payload,
-                                         timeout=self.timeout)
+            res = self.__send_request(method="POST",
+                                      url=f'{self.__baseUrl}pages',
+                                      headers=self.__headers,
+                                      json=payload)
 
         if res.ok:
             # 更新表
@@ -431,10 +445,10 @@ class easyNotion:
             'children': payload
         }
 
-        return self.__session.patch(self.__baseUrl + 'blocks/' + blocks[0].parent_id + '/children',
-                                    headers=self.__headers,
-                                    json=payload,
-                                    timeout=self.timeout)
+        return self.__send_request(method="PATCH",
+                                   url=self.__baseUrl + 'blocks/' + blocks[0].parent_id + '/children',
+                                   headers=self.__headers,
+                                   json=payload)
 
     # 更新数据
     def update(self, update_data: Dict[str, str], update_condition: Dict[str, Union[str, re.Pattern]]) -> \
@@ -456,11 +470,10 @@ class easyNotion:
         for ID in id_list:
             temp_ret = None
             while not isinstance(temp_ret, requests.models.Response):
-                temp_ret = self.__session.request(method='PATCH',
-                                                  url=self.__baseUrl + 'pages/' + ID,
-                                                  headers=self.__headers,
-                                                  json=payload,
-                                                  timeout=self.timeout)
+                temp_ret = self.__send_request(method='PATCH',
+                                               url=self.__baseUrl + 'pages/' + ID,
+                                               headers=self.__headers,
+                                               json=payload)
 
             ret.append(temp_ret)
 
@@ -478,15 +491,15 @@ class easyNotion:
 
     # 更新页面中的块
     def update_page(self, block: Union[Divider, Mention, LinkPreview, RichText]):
-        return self.__session.patch(self.__baseUrl + 'blocks/' + block.id,
-                                    headers=self.__headers,
-                                    json=block.get_payload(),
-                                    timeout=self.timeout)
+        return self.__send_request(method='PATCH',
+                                   url=self.__baseUrl + 'blocks/' + block.id,
+                                   headers=self.__headers,
+                                   json=block.get_payload())
 
     def delete_page(self, page_id: str):
-        return self.__session.delete(self.__baseUrl + 'blocks/' + page_id,
-                                     headers=self.__headers,
-                                     timeout=self.timeout)
+        return self.__send_request(method='DELETE',
+                                   url=self.__baseUrl + 'blocks/' + page_id,
+                                   headers=self.__headers)
 
     # 得到各种类型数据的用于更新、插入数据的payload
     def __get_payload(self, col_name: str, content: str) -> Dict[str, dict]:
@@ -547,10 +560,9 @@ class easyNotion:
         for ID in id_list:
             temp_ret = None
             while not isinstance(temp_ret, requests.models.Response):
-                temp_ret = self.__session.request(method='DELETE',
-                                                  url=self.__baseUrl + 'blocks/' + ID,
-                                                  headers=self.__headers)
-
+                temp_ret = self.__send_request(method='DELETE',
+                                               url=self.__baseUrl + 'blocks/' + ID,
+                                               headers=self.__headers)
             ret.append(temp_ret)
 
         # 更新表
@@ -690,80 +702,6 @@ class easyNotion:
         else:
             self.__token = self.__all_token
             self.__headers.update({'Authorization': 'Bearer %s' % self.__token})
-
-    # 重试前行为
-    def __pre_retry_operation(self, retry_cnt, e) -> None:
-        """
-        重试执行前函数
-        :param self: 当前类
-        :param e: 异常
-        :param retry_cnt: 重试次数
-        :return: 无
-        """
-        if isinstance(e, requests.exceptions.RequestException):
-            if isinstance(e, requests.exceptions.Timeout):
-                logging.warning(f'超时,第{retry_cnt}次重试')
-            elif isinstance(e, requests.exceptions.ConnectionError):
-                logging.warning(f'连接失败,第{retry_cnt}次重试')
-            else:
-                logging.warning(f'正常错误,第{retry_cnt}次重试')
-        elif isinstance(e, requests.exceptions.HTTPError):
-            logging.warning(f'http连接错误,第{retry_cnt}次重试')
-        else:
-            logging.warning(f'未知错误,第{retry_cnt}次重试')
-
-        self.update_random_useragent_and_token()
-
-    # 更新session挂载
-    def __update_session_mount(self):
-        # 自定义子类,用于添加重试前自定义行为
-        class CustomHTTPAdapter(HTTPAdapter):
-            def __init__(self, max_retries=None, custom_retry_callback=None, *args, **kwargs):
-                self.custom_retry_callback = custom_retry_callback
-                super(CustomHTTPAdapter, self).__init__(max_retries=max_retries, *args, **kwargs)
-
-            def send(self, request, **kwargs):
-                if self.custom_retry_callback:
-                    response = None
-                    retry_count = 0
-                    last_exception = None
-                    while True:
-                        try:
-                            response = super(CustomHTTPAdapter, self).send(request, **kwargs)
-                            break
-                        except requests.exceptions.RequestException as e:
-                            if retry_count < self.max_retries.total:
-                                retry_count += 1
-                                last_exception = e
-                                self.custom_retry_callback(retry_count, last_exception)
-                            else:
-                                raise
-                    return response
-                else:
-                    return super(CustomHTTPAdapter, self).send(request, **kwargs)
-
-        custom_retry_strategy = Retry(
-            total=self.__retry_time,  # 最大重试次数
-            backoff_factor=0.5,  # 退避因子
-            status_forcelist=[i for i in range(201, 600)],  # 除200状态码外均重试
-        )
-
-        # 使用自定义重试策略和自定义的 HTTPAdapter 配置会话对象
-        self.__session.mount('http://', CustomHTTPAdapter(max_retries=custom_retry_strategy,
-                                                          custom_retry_callback=self.__pre_retry_operation))
-        self.__session.mount('https://', CustomHTTPAdapter(max_retries=custom_retry_strategy,
-                                                           custom_retry_callback=self.__pre_retry_operation))
-
-    # 获得retry_time
-    @property
-    def retry_time(self):
-        return self.__retry_time
-
-    # 设置retry_time
-    @retry_time.setter
-    def retry_time(self, value):
-        self.__retry_time = value
-        self.__update_session_mount()
 
     # 获得truest_env
     @property
