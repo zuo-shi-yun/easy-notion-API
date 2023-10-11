@@ -6,54 +6,48 @@
 
 ## :muscle:功能介绍
 
-- 相较于其他封装的API使用起来更加简单快速的notionAPI
-- 发送requests时关闭代理
-- 具备基本的增删改查功能
+- 相较于其他API更加简单、易上手
+- 有着完善的网络请求重试机制
+- 支持数据库、页面的增删改查
+- 查询条件支持正则
 
 ## :bangbang:使用限制
 
-- 只可用于notion中页面类型为"Database - Full page"的页面
-- 数据库中除title列其余所有列属性必须为text
-- 没有异步版本
+- 只可用于notion中数据库类型为"Database - Full page"的数据库
+- 数据库中除title列其余所有列属性**只能为text、ID、url**
+- 对页面的操作的支持度较低
+- 易上手的代价是没有复杂的机制，未在大型项目上测试
 
 ## :wrench:快速上手
 
-首先需要获得集成 Notion 的 Token 和 databbase_id 。有关如何获得Token
-，请参见[查看这里](https://developers.notion.com/docs/getting-started#step-2-share-a-database-with-your-integration)
-。要获取databbase_id，请查看Notion文档中的查询数据库页面的URL。
+首先需要获得集成 Notion 的 Token 和 数据库/页面id 。有关如何获得Token，请[查看这里](https://developers.notion.com/docs/getting-started#step-2-share-a-database-with-your-integration)。
+要获取数据库/页面id，请查看Notion文档中相关教程。
 
 ```python
+from pprint import pprint
+
 from easyNotion import easyNotion
 
 db = easyNotion(notion_id='notion_id', token='token')
 
-# 获取全部未处理的表
-table_all = db.getTableAll()
+# 获取全部数据表
+table = db.get_table()
 
-# 获取处理后的表
-table = db.getTable()
+# 查询指定的列
+col = db.query(['value'], {'key': 'query_key'})
+pprint(col)
 
-# 根据指定列名col查询该列
-ret = db.queryCol(col="column_name")
+# 插入新行
+res = db.insert({'key': 'insert_key', 'value': 'insert_value'})
+pprint(res)
 
-# 查找指定列的行
-row = db.queryRow(col="column_name", content="column_content")
+# 更新指定的行
+res = db.update({'value': 'new_value'}, {'key': 'update_key'})
+pprint(res)
 
-# 获取总行数
-row_count = db.getRowCnt()
-
-# 插入数据
-data = {"title": "test_title", "column_name1": "value1", "column_name2": "value2"}
-res = db.insert(data=data)
-
-# 更新数据
-res = db.update(,
-
-# 删除数据
-res = db.delete()
-
-# 关闭session
-db.closeSession()
+# 删除指定的行
+res = db.delete({'key': 'delete_key'})
+pprint(res)
 ```
 
 类：easyNotion
@@ -62,148 +56,125 @@ db.closeSession()
 ### 构造函数
 
 ```python
-def __init__(self, database_id, token)
+def __init__(self, 
+             notion_id: str, 
+             token: Union[str, List[str]], 
+             sort_key: List[str] = '', 
+             reverse: List[bool] = '',
+             retry_time=3, 
+             timeout=15, 
+             get_all=True, 
+             is_page: bool = False, 
+             need_recursion: bool = False,
+             need_download: bool = False, 
+             download_path: str = '', 
+             trust_env: bool = False)
 ```
 
 * 初始化 `easyNotion` 类的新实例。
 * 参数:
-    * `database_id` (str): Notion 数据库的ID。
-    * `token` (str): 用于访问 Notion API 的 API 令牌。
+    * `notion_id (str)`: Notion 数据库的ID。
+    * `token (Union[str, List[str])`: 用于访问 Notion API 的 API 令牌。若有高并发需求,建议以列表形式传入多个token。
+    * `sort_key (List[str])`: 数据库配置：排序的列,支持根据多列排序。
+    * `reverse (List[bool])`: 数据库配置：默认升序,为True时降序，与sort_key一一对应。
+    * `retry_time (int)`: 网络请求配置:重试次数,默认3次。
+    * `timeout (int)`: 网络请求配置:超时时间,默认15s。
+    * `get_all (bool)`: 数据库配置：是否获取所有数据，默认获取，反之仅获取数据库前100条。
+    * `is_page (bool)`: 是否为页面，默认为否。
+    * `need_recursion (bool)`: 页面配置:是否需要递归获得页面的数据,默认不需要。
+    * `need_download (bool)`: 页面配置:是否需要下载到本地,默认不需要。
+    * `download_path (str)`: 页面配置:若有文件保存到哪个目录中。
+    * `trust_env (bool)`: 网络请求配置:是否信任本地环境,默认不信任。
 
-### 类属性
+## 方法
 
-#### `baseUrl`
+### 数据库相关
 
-- 类型：字符串
-- 描述：API的基础URL
-
-#### `database_id`
-
-- 类型：字符串
-- 描述：数据库的ID
-
-#### `headers`
-
-- 类型：字典
-- 描述：请求头信息，包括Accept、Notion-Version、Content-Type、Authorization等
-
-#### `session`
-
-- 类型：`requests.Session`对象
-- 描述：用于发送HTTP请求的会话对象
-
-#### `table`
-
-- 类型：列表
-
-- 描述：处理后的数据表，包含数据库中的所有行
-
-### 方法
-
-#### `getTableAll()`
+#### `get_table()`
 
 ```python
-def getTableAll(self) -> dict
+def get_table(self) -> List[Dict[str, str]]
 ```
 
-* 从 Notion 数据库中检索原始数据表。
-* 返回:
-    * 包含数据库中所有未处理数据的 JSON 对象。
+* 从 Notion 数据库中检索全部数据表。
+* 返回:全部数据表
 
-#### `getTable()`
+#### `query()`
 
 ```python
-def getTable(self) -> list
+query(self, query_col: List[str], query_condition: Dict[str, Union[str, re.Pattern]] = '') 
+-> List[Union[str, Dict[str, str]]]
 ```
 
-* 从 Notion 数据库中检索处理后的数据表。
-* 返回:
-    * 包含表示处理后数据表的字典列表。
-* 注意:
-    * 此方法内部调用 `getTableAll()` 来获取原始数据并对其进行处理以获得最终的数据表。
+* 根据条件查询内容。
+* 参数：
+    * `query_col: List[str]`：字符串列表，表示要查询的列名。
+    * `query_condition: Dict[str, Union[str, re.Pattern]]`：查询条件，字典形式，列名与内容对应。支持正则。为空时查询指定列的全部行。
 
-#### `queryCol(col: str) -> list`
+* 返回:`List[Union[str, Dict[str, str]]]`
+    * 查询多列时：返回字典列表,每一个字典是一行，列名与内容对应。
+    * 查询一列时：返回字符串列表，即所查询的列。
+
+#### `insert()`
 
 ```python
-def queryCol(self, col: str) -> list
+def insert(self, data: Dict[str, str]) -> requests.models.Response
 ```
 
-* 查询数据表中的特定列并返回其值。
+* 插入数据
 * 参数:
-    * `col` (str): 要查询的列的名称。
-* 返回:
-    * 包含指定列中值的字符串列表。
+    * `data: Dict[str, str]`：插入的数据，字典形式，列名与内容对应。若未对全部列指定内容，未指定内容的列插入内容为空。
+* 返回:`requests.models.Response`
+    * 网络请求响应对象。
 
-#### `queryRow(col: str, content: str) -> dict`
+#### `update()`
 
 ```python
-def queryRow(self, col: str, content: str) -> dict
+def update(self, update_data: Dict[str, str], update_condition: Dict[str, Union[str, re.Pattern]]) 
+-> List[requests.models.Response]
 ```
 
-* 根据特定列及其内容在数据表中查询行。
+* 根据条件更新内容。
 * 参数:
-    * `col` (str): 要搜索的列的名称。
-    * `content` (str): 要在指定列中搜索的值。
-* 返回:
-    * 表示匹配行的原始数据的字典。
-* 注意:
-    * 如果未找到匹配的行，则返回一个空字典 `{}`。
+    * `update_data: Dict[str, str]` : 更新内容，字典形式，列名与内容对应。
+    * `update_condition: Dict[str, Union[str, re.Pattern]]`: 更新条件，字典形式，列名与内容对应。支持正则。
+* 返回:`List[requests.models.Response]`
+    * 符合更新条件的每一行的网络请求响应对象列表。
 
-#### `getRowCnt() -> int`
+#### `delete()`
 
 ```python
-def getRowCnt(self) -> int
+def delete(self, delete_condition: Dict[str, Union[str, re.Pattern]]) -> List[requests.models.Response]
 ```
 
-* 检索数据表中的总行数。
-* 返回:
-    * 表示表中总行数的整数。
+* 根据条件删除行。
+* 参数：
+    * `delete_condition: Dict[str, Union[str, re.Pattern]]`：删除条件，字典形式，列名与内容对应。支持正则。
 
-#### `insert(data: dict)`
+* 返回:`List[requests.models.Response]`
+    * 符合删除条件的每一行的网络请求响应对象列表。
+
+#### `append()`
 
 ```python
-def insert(self, data: dict)
+def append(self, append_data: Dict[str, str], append_condition: Dict[str, Union[str, re.Pattern]],divide='') -> List[requests.models.Response]
 ```
 
-* 向 Notion 数据库插入数据。
+* 根据条件追加内容
 * 参数:
-    * `data` (dict): 要插入的数据。字典中的第一个值必须对应于 "title" 列的值。
-* 返回:
-    * API 请求的响应对象。
+    * `append_data: Dict[str, str`]: 追加内容，字典形式，列名与内容对应。
+    * `append_condition: Dict[str, Union[str, re.Pattern]]`：追加条件，字典形式，列名与内容对应，支持正则。
+    * `divide=''`：原内容与追加内容的分隔符，默认为空。
+* 返回:`List[requests.models.Response]`
+    * 符合追加条件的每一行的网络请求响应对象列表。
 
-#### `update(col: str, content: str, update_col: str, update_content: str, isTitle=False)`
+### 页面相关(支持度较低)
 
-```python
-def update(self, col: str, content: str, update_col: str, update_content: str, isTitle=False)
-```
-
-* 更新数据表中某一行的特定列。
-* 参数:
-    * `col` (str): 用于标识行的列。
-    * `content` (str): 用于标识行的指定列的内容。
-    * `update_col` (str): 要更新的列的名称。
-    * `update_content` (str): 要在指定列中更新的新内容。
-    * `isTitle` (bool): 表示指定列是否为标题列。默认为 `False`，若更新的列为title列，则应为True。
-* 返回:
-    * API 请求的响应对象。
-
-#### `delete(col: str, content: str)`
+#### `get_table()`
 
 ```python
-def delete(self, col: str, content: str)
+def get_table(self) -> List[Dict[str, str]]
 ```
 
-* 根据特定列及其内容从数据表中删除一行。
-* 参数:
-    * `col` (str): 要删除的列的名称。
-    * `content` (str): 标识删除列中行的值。
-* 返回:
-    * API 请求的响应对象。
-
-#### `closeSession()`
-
-```python
-def closeSession(self)
-```
-
-* 关闭用于进行 API 请求的会话。
+* 从 Notion 数据库中检索全部数据表。
+* 返回:全部数据表

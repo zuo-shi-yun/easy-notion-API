@@ -24,7 +24,7 @@ class easyNotion:
         :param sort_key: 排序的列,支持根据多列排序
         :param reverse: 默认升序,为True时降序
         :param retry_time: 重试次数,默认3次
-        :param timeout:超时时间,默认10s
+        :param timeout:超时时间,默认15s
         :param get_all: 是否获取所有数据，默认获取
         :param is_page: 是否为页面，默认为否
         :param need_recursion: 是否需要递归获得页面的数据,默认不需要
@@ -166,8 +166,9 @@ class easyNotion:
 
         temp_table = copy.deepcopy(self.__table)  # 深拷贝
 
-        for row in temp_table:
-            del row['id']  # 删除id列
+        if not self.is_page:  # 数据库类型
+            for row in temp_table:
+                del row['id']  # 删除id列
 
         return temp_table
 
