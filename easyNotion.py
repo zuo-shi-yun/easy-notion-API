@@ -164,13 +164,7 @@ class easyNotion:
 
         self.__get_table(base_table)
 
-        temp_table = copy.deepcopy(self.__table)  # 深拷贝
-
-        if not self.is_page:  # 数据库类型
-            for row in temp_table:
-                del row['id']  # 删除id列
-
-        return temp_table
+        return copy.deepcopy(self.__table)  # 深拷贝
 
     # 根据原始表获得处理后的表
     def __get_table(self, base_table: json) -> bool:
