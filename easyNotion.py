@@ -78,7 +78,7 @@ class easyNotion:
         # 数据库对象信息
         self.__table = []  # 数据表
         self.__col_name = {}  # 列类型
-        self.__start_cursor = None  # 查询起始点
+        self.__start_cursor = True  # 查询起始点
 
     # 使用包裹器发送请求
     def __send_request(self, **kwargs):
@@ -133,7 +133,7 @@ class easyNotion:
         original_table = {}
 
         while True:
-            if self.__start_cursor:
+            if self.__start_cursor and isinstance(self.__start_cursor, str):
                 payload["start_cursor"] = self.__start_cursor
 
             # 发送请求
