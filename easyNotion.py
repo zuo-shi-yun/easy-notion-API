@@ -20,7 +20,7 @@ class easyNotion:
                  token: Union[str, List[str]],
                  sort_key: List[str] = '',
                  reverse: List[bool] = '',
-                 retry_time: int = 3,
+                 retry_time: int = 4,
                  timeout: int = 15,
                  get_all: bool = True,
                  is_page: bool = False,
@@ -53,7 +53,7 @@ class easyNotion:
         self.__token = ''  # 当前使用token
         self.__sort_key = kwargs.get('sort_key', [])  # 排序键
         self.__reverse = kwargs.get('reverse', [False] * len(self.__sort_key))  # 是否逆序
-        self.retry_time = kwargs.get('retry_time', 3)  # 重试次数
+        self.retry_time = kwargs.get('retry_time', 4)  # 重试次数
         self.timeout = kwargs.get('timeout', 15)  # 超时时间
         self.get_all = kwargs.get('get_all', True)  # 是否获得数据库中全部数据
         self.is_page = kwargs.get('is_page', False)  # 是否是页面
@@ -78,6 +78,7 @@ class easyNotion:
         # 数据库对象信息
         self.__table = []  # 数据表
         self.__col_name = {}  # 列类型
+        self.__start_cursor = None  # 查询起始点
 
     # 使用包裹器发送请求
     def __send_request(self, **kwargs):
@@ -129,12 +130,11 @@ class easyNotion:
                 {'property': sort_col[0],
                  'direction': 'descending' if sort_col[1] else 'ascending'})
 
-        start_cursor = None
         original_table = {}
 
         while True:
-            if start_cursor:
-                payload["start_cursor"] = start_cursor
+            if self.__start_cursor:
+                payload["start_cursor"] = self.__start_cursor
 
             # 发送请求
             if self.is_page:  # 页面类型
@@ -154,13 +154,27 @@ class easyNotion:
             else:
                 original_table = data
 
+            # 记录分页位置
+            self.__start_cursor = data["next_cursor"]
+
             if not data.get("has_more") or not self.get_all:  # 没有后续或不得到全部表则跳出循环
                 break
 
-            # 记录分页位置
-            start_cursor = data["next_cursor"]
-
         return original_table
+
+    # 从上一次查询处继续查询100行
+    def next(self) -> bool:
+        """
+        从上一次查询处继续查询100行
+        :return:有后续内容返回True,否则返回False
+        """
+
+        if self.__start_cursor:
+            original_table = self.get_original_table()
+            self.__get_table(original_table)
+            return True
+        else:
+            return False
 
     # 获得处理后的数据表,避免重复查询
     def get_table(self) -> List[Dict[str, str]]:
