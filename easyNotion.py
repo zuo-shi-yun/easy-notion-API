@@ -4,7 +4,7 @@ import logging
 import os.path
 import random
 import re
-from typing import Dict
+from typing import Dict, overload
 
 import requests
 import tenacity
@@ -14,42 +14,57 @@ from blocksModel import *
 
 
 class easyNotion:
-    def __init__(self, notion_id: str, token: Union[str, List[str]], sort_key: List[str] = '', reverse: List[bool] = '',
-                 retry_time=3, timeout=15, get_all=True, is_page: bool = False, need_recursion: bool = False,
-                 need_download: bool = False, download_path: str = '', trust_env: bool = False):
+    @overload
+    def __init__(self,
+                 notion_id: str,
+                 token: Union[str, List[str]],
+                 sort_key: List[str] = '',
+                 reverse: List[bool] = '',
+                 retry_time: int = 3,
+                 timeout: int = 15,
+                 get_all: bool = True,
+                 is_page: bool = False,
+                 need_recursion: bool = False,
+                 need_download: bool = False,
+                 download_path: str = '',
+                 trust_env: bool = False):
+        ...
+
+    def __init__(self, notion_id: str, token: Union[str, List[str]], **kwargs):
         """
-        获得notion服务
+        获得notion服务,可选的关键字参数解释如下\n
+        sort_key:List[str] - 排序的列,支持根据多列排序\n
+        reverse:List[bool] - 默认升序,为True时降序\n
+        retry_time:int - 重试次数,默认3次\n
+        timeout:int - 超时时间,默认15s\n
+        get_all:bool - 是否获取所有数据,默认获取\n
+        is_page:bool - 是否为页面,默认为否\n
+        need_recursion:bool - 是否需要递归获得页面的数据,默认不需要\n
+        need_download:bool - 是否需要下载到本地,默认不需要\n
+        download_path:str - 若有文件保存到哪个目录中\n
+        trust_env:bool - 是否关闭代理,默认关闭\n
         :param notion_id: 数据库/页面ID
         :param token: 集成令牌
-        :param sort_key: 排序的列,支持根据多列排序
-        :param reverse: 默认升序,为True时降序
-        :param retry_time: 重试次数,默认3次
-        :param timeout:超时时间,默认15s
-        :param get_all: 是否获取所有数据，默认获取
-        :param is_page: 是否为页面，默认为否
-        :param need_recursion: 是否需要递归获得页面的数据,默认不需要
-        :param need_download: 是否需要下载到本地,默认不需要
-        :param download_path: 若有文件保存到哪个目录中
-        :param trust_env: 是否关闭代理,默认关闭
+        :param kwargs: 关键字参数
         """
         # 数据库/页面配置
         self.notion_id = notion_id  # 数据库或页面ID
         self.__all_token = token  # 全部token
         self.__token = ''  # 当前使用token
-        self.__sort_key = sort_key  # 排序键
-        self.__reverse = reverse if reverse else [False] * len(sort_key)  # 是否逆序
-        self.retry_time = retry_time  # 重试次数
-        self.timeout = timeout  # 超时时间
-        self.get_all = get_all  # 是否获得数据库中全部数据
-        self.is_page = is_page  # 是否是页面
-        self.need_recursion = need_recursion  # 是否递归获得页面数据
-        self.__need_download = need_download  # 是否下载
-        self.download_path = download_path  # 下载地址
-        self.__trust_env = trust_env  # 是否关闭代理
+        self.__sort_key = kwargs.get('sort_key', [])  # 排序键
+        self.__reverse = kwargs.get('reverse', [False] * len(self.__sort_key))  # 是否逆序
+        self.retry_time = kwargs.get('retry_time', 3)  # 重试次数
+        self.timeout = kwargs.get('timeout', 15)  # 超时时间
+        self.get_all = kwargs.get('get_all', True)  # 是否获得数据库中全部数据
+        self.is_page = kwargs.get('is_page', False)  # 是否是页面
+        self.need_recursion = kwargs.get('need_recursion', False)  # 是否递归获得页面数据
+        self.__need_download = kwargs.get('need_download', False)  # 是否下载
+        self.download_path = kwargs.get('download_path', '')  # 下载地址
+        self.__trust_env = kwargs.get('trust_env', False)  # 是否关闭代理
 
         # 网络相关配置
         self.__session = requests.Session()  # session
-        self.__session.trust_env = trust_env  # 初始化本地环境
+        self.__session.trust_env = self.__trust_env  # 初始化本地环境
         self.__headers = {
             'Accept': 'application/json',
             'Notion-Version': '2022-06-28',
@@ -133,7 +148,7 @@ class easyNotion:
                                           headers=self.__headers)
 
             data = res.json()  # 转为dict格式
-            # 判断原始表是为为空，不为空则追加
+            # 判断原始表是为为空,不为空则追加
             if original_table:
                 original_table['results'].extend(data['results'])
             else:
@@ -352,7 +367,7 @@ class easyNotion:
         判断row是否符合条件condition,condition为正则表达式
         :param row: 行Dict格式
         :param condition: 条件,Dict格式,支持正则
-        :return: 符合条件返回True，否则返回False
+        :return: 符合条件返回True,否则返回False
         """
 
         for i in condition:
