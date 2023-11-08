@@ -72,7 +72,6 @@ class easyNotion:
             'Connection': 'close',
             'Cookie': '__cf_bm=uxsliE4EFVpT5YkTZ6ACr1jH2vu1TjkfG1gTPXYDyKg-1683367680-0-AVbHMiNx95PBmx3aRCHSTZhivPqUb/Chgy2MTqqPTAkVweNB6jjhKyixXIak85+bXiotNY0RQCRRi3XWtGQ4L4s='
         }  # 请求头
-        self.update_random_useragent_and_token()  # 更新请求代理
         self.__baseUrl = 'https://api.notion.com/v1/'  # 基础url
 
         # 数据库对象信息
@@ -92,7 +91,7 @@ class easyNotion:
 
         # 重试前行为
         def before_retry(retry_statue: tenacity.RetryCallState):
-            self.update_random_useragent_and_token()  # 更新token
+            self.__update_random_useragent_and_token()  # 更新token
             # 检查是否有异常
             exception = retry_statue.outcome.exception() if retry_statue.outcome.exception() else ''
             exception = '重试原因:' + str(exception) if exception else exception
@@ -112,6 +111,7 @@ class easyNotion:
                before_sleep=before_retry,  # 重试前行为
                retry_error_callback=retry_error)  # 结束重试前行为
         def send_request(**kwargs):
+            self.__update_random_useragent_and_token()  # 更新请求代理
             return self.__session.request(**kwargs, timeout=self.timeout)
 
         return send_request(**kwargs)
@@ -644,7 +644,7 @@ class easyNotion:
         return ret
 
     # 随机添加一个请求代理
-    def update_random_useragent_and_token(self) -> None:
+    def __update_random_useragent_and_token(self) -> None:
         headers_list = [
             {
                 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
