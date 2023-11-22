@@ -94,8 +94,8 @@ class easyNotion:
         # 重试前行为
         def before_retry(retry_statue: tenacity.RetryCallState):
             # 检查是否有异常
-            exception = retry_statue.outcome.exception() if retry_statue.outcome.exception() else ''
-            exception = '重试原因:' + str(exception) if exception else exception
+            exception = retry_statue.outcome.exception() or ''
+            exception = '重试原因:' + str(exception)
             logging.warning(f'第{retry_statue.attempt_number}次重试.{exception}')  # 输出次数以及异常
             headers.update({'Connection': 'close'})  # 关闭持续链接
 
@@ -213,7 +213,7 @@ class easyNotion:
             get_random_requests_headers()  # 更新请求代理
             return self.__session.request(*args, **kwargs, timeout=self.timeout, headers=headers)
 
-        return send_request(**kwargs)
+        return send_request(*args, **kwargs)
 
     # 获得原始数据表
     def get_original_table(self) -> json:
